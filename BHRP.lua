@@ -5,7 +5,7 @@ game:GetService("ReplicatedStorage").RE["1RPNam1eTex1t"]:FireServer(table.unpack
 
 game:GetService("ReplicatedStorage").RE["1RPNam1eTex1t"]:FireServer(table.unpack({
     [1] = "RolePlayName",
-    [2] = "ま S4turn Hub",
+    [2] = "RealYoHub",
 }))
 
 game:GetService("ReplicatedStorage").RE["1RPNam1eColo1r"]:FireServer(table.unpack({
@@ -29,7 +29,7 @@ local Window = Libary:MakeWindow({
 })
 
 Window:AddMinimizeButton({
-    Button = { Image = "rbxassetid://101107248492443", BackgroundTransparency = 0 },
+    Button = { Image = "rbxassetid://140142072983368", BackgroundTransparency = 0 },
     Corner = { CornerRadius = UDim.new(35, 1) },
 })
 
@@ -38,15 +38,14 @@ local InfoTab = Window:MakeTab({ "Informations", "info" })
 InfoTab:AddSection({ "Informations" })
 
 InfoTab:AddSection({ "Credits" })
-InfoTab:AddParagraph({ "Programmer:", "@toparemos & @sou.wx" })
-InfoTab:AddParagraph({ "Team:", "KevinSze" })
+InfoTab:AddParagraph({ "Owner:" , "KevinSze" })
 
 InfoTab:AddSection({ "Discord" })
 InfoTab:AddDiscordInvite({
-    Name = "⽦ S4turn Studios",
+    Name = "RealYoHub Discord",
     Description = "Stay up to date with all the news from our Hub",
-    Logo = "rbxassetid://101107248492443",
-    Invite = "dsc.gg/s4turnstudios",
+    Logo = "rbxassetid://140142072983368",
+    Invite = "discord.gg/xW3NDUMNnS",
 })
 
 InfoTab:AddSection({ "Information" })
@@ -76,10 +75,6 @@ info["You Username:"] = player.Name or "Unidentified"
 info["You Display Name:"] = player.DisplayName or "Unidentified"
 info["You User Id:"] = player.UserId or "Unidentified"
 
-local netStats = Stats:FindFirstChild("Network")
-local serverStats = netStats and netStats:FindFirstChild("ServerStatsItem")
-info["You Ping:"] = (serverStats and getStatValue(serverStats, "Data Ping") .. " ms") or "Unidentified"
-
 if identifyexecutor then
     local success, name, version = pcall(function() return identifyexecutor() end)
     info["You Executor:"] = success and (name .. (version and (" v" .. version) or "")) or "Unidentified"
@@ -93,11 +88,10 @@ end
 InfoTab:AddParagraph({ "You Language:", "English" })
 InfoTab:AddParagraph({ "You are Playing:", "Brookhaven RP 🏡" })
 InfoTab:AddParagraph({ "You are Using:", "RealYoHub" })
-InfoTab:AddParagraph({ "You are Using Version:", "1.1.7 - Beta" })
+InfoTab:AddParagraph({ "You are Using Version:", "1.0.0 New Beta" })
 
 InfoTab:AddSection({ "Warns" })
-InfoTab:AddParagraph({ "Some functions in this script are not made by us, they are from other scripters" })--[[
-InfoTab:AddParagraph({ "We are using Nytherune, Chaos, Coquette as the base for our scripter" })--]]
+InfoTab:AddParagraph({ "Some functions in this script are not made by us, they are from other scripters" })
 InfoTab:AddParagraph({ "Found an error? Just report it to one of our programmers" })
 
 InfoTab:AddSection({ "Others" })
@@ -108,6 +102,7 @@ InfoTab:AddButton({
         TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, game.Players.LocalPlayer)
     end
 })
+
 --[[
 local ADT = Window:MakeTab({ "Administrator", "code" })
 
@@ -120,7 +115,7 @@ Callback = function()
 loadstring(game:HttpGet(""))()
 end
 })
---]]
+
 local GamePTab = Window:MakeTab({ "Spoofed Gamepass", "gamepad" })
 
 GamePTab:AddSection({ "Spoofed Gamepass" })
@@ -143,13 +138,13 @@ GamePTab:AddTextBox({
         end
     end
 })
-
+]]--
 local AutoTab = Window:MakeTab({ "Auto Farm", "gift" })
 
 AutoTab:AddSection({ "Auto Farm" })
 
 AutoTab:AddSection({ "Events" })
-AutoTab:AddParagraph({ "There are currently no active events..." })
+AutoTab:AddParagraph({ "NOTHING HERE LOL" })
 
 local ShadersTab = Window:MakeTab({ "Shaders", "server" })
 
