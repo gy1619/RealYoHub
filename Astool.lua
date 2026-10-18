@@ -1000,6 +1000,13 @@ function Lib:Initialize(opts)
         topButtons[j] = b; SafeClick(b, function() SelectSub(j) end); RegisterLang(b, name)
     end
 
+self._sideButtons = sideButtons
+    self._topButtons = topButtons
+    self._mainNames = mainNames
+    self._subNameSets = subNameSets
+    self._refreshTopNames = RefreshTopNames
+    self._getCurrentMain = function() return currentMain end
+
     local ballSize = S(56)
     local Ball = Create("TextButton", { Size = UDim2.fromOffset(ballSize, ballSize), Position = UDim2.fromOffset(S(14), (vpSize.Y - ballSize) / 2), BackgroundTransparency = 1, Text = "", AutoButtonColor = false, Parent = ScreenGui })
     local BallRing = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Parent = Ball }); AddCorner(BallRing, ballSize / 2)
@@ -1162,6 +1169,38 @@ function Lib:RequestGameBridge(payload)
 
     table.insert(self.TakeoverSessions, bridge)
     return true, bridge
+end
+
+-------------------------------------------------
+-- Takeover mapping support: rename tabs + index-based page use
+-------------------------------------------------
+function Lib:RenameMain(i, newName)
+    if not (self._mainNames and self._sideButtons) then return false end
+    local b = self._sideButtons[i]
+    if not b then return false end
+    self._mainNames[i] = newName
+    b.Text = self.T(newName)
+    self.RegisterLang(b, newName)
+    return true
+end
+
+function Lib:RenameSub(m, j, newName)
+    if not (self._subNameSets and self._subNameSets[m]) then return false end
+    self._subNameSets[m][j] = newName
+    if self._getCurrentMain and self._refreshTopNames and self._getCurrentMain() == m then
+        self._refreshTopNames(m)
+    end
+    return true
+end
+
+function BridgeMeta:UsePageIndex(m, j, mode)
+    local scroll = self.UI:GetScroll(m, j)
+    if not scroll then return false, "page_not_ready" end
+    if mode ~= "Append" then ClearPageScroll(scroll) end
+    self.Host = scroll
+    self.MainIndex = m
+    self.SubIndex = j
+    return true
 end
 
 return Lib
