@@ -184,10 +184,10 @@ MakeButton(home, "Join Discord", function() setclipboard("https://discord.gg/SjR
 
 local uidRow = FlowOf(home).AddFull(S(26))
 Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, S(6)) }, uidRow)
-Create("TextLabel", { Size = UDim2.fromOffset(S(60), S(26)), BackgroundTransparency = 1, Text = T("HWID:"), TextColor3 = COL.Green, TextSize = TS(12), Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, Parent = uidRow })
+Create("TextLabel", { Size = UDim2.fromOffset(S(60), S(26)), BackgroundTransparency = 1, Text = "HWID:", TextColor3 = COL.Green, TextSize = TS(12), Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, Parent = uidRow })
 Create("TextLabel", { Size = UDim2.fromOffset(S(240), S(26)), BackgroundTransparency = 1, Text = DEVICE_ID, TextColor3 = COL.Red, TextSize = TS(12), Font = Enum.Font.Code, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = uidRow })
-local copyBtn = Create("TextButton", { Size = UDim2.fromOffset(S(50), S(24)), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 0.35, Text = T("Copy"), TextColor3 = COL.TextDark, TextSize = TS(12), Font = Enum.Font.GothamMedium, AutoButtonColor = false, Parent = uidRow })
-RegisterLang(copyBtn, "Copy")
+local copyBtn = Create("TextButton", { Size = UDim2.fromOffset(S(50), S(24)), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 0.35, Text = "Copy", TextColor3 = COL.TextDark, TextSize = TS(12), Font = Enum.Font.GothamMedium, AutoButtonColor = false, Parent = uidRow })
+
 AddCorner(copyBtn, S(4))
 SafeClick(copyBtn, function() if setclipboard then pcall(function() setclipboard(DEVICE_ID) end); Toast("HWID Replicated") else Toast("Executer not support copy") end end)
 
@@ -207,18 +207,18 @@ local cfgNameBox = MakeTextBox(cfg, "Config name", "default")
 local initNames = ListConfigNames()
 local cfgDrop = MakeDropdown(cfg, "Config choose", (#initNames > 0) and initNames or { "No config" }, (#initNames > 0) and initNames[1] or "No config", function(opt) if opt ~= "No config" then cfgNameBox.Text = opt end end)
 local cfgGrid = CreateGrid(cfg)
-MakeButton(cfgGrid, "Save config", function() local n = cfgNameBox.Text:gsub("^%s+", ""):gsub("%s+$", ""); if n == "" then Toast("請先輸入配置名稱") return end; SaveConfig(n); cfgDrop.SetOptions(ListConfigNames()) end)
-MakeButton(cfgGrid, "Open conig", function() local n = cfgNameBox.Text:gsub("^%s+", ""):gsub("%s+$", ""); if n == "" then Toast("請先輸入配置名稱") return end; LoadConfig(n) end)
-MakeButton(cfgGrid, "Delete config", function() local n = cfgNameBox.Text:gsub("^%s+", ""):gsub("%s+$", ""); if n == "" then Toast("請先輸入配置名稱") return end; DeleteConfig(n); cfgDrop.SetOptions(ListConfigNames()) end)
-MakeButton(cfgGrid, "refresh list", function() cfgDrop.SetOptions(ListConfigNames()); Toast("配置列表已刷新") end)
+MakeButton(cfgGrid, "Save config", function() local n = cfgNameBox.Text:gsub("^%s+", ""):gsub("%s+$", ""); if n == "" then Toast("input name") return end; SaveConfig(n); cfgDrop.SetOptions(ListConfigNames()) end)
+MakeButton(cfgGrid, "Open conig", function() local n = cfgNameBox.Text:gsub("^%s+", ""):gsub("%s+$", ""); if n == "" then Toast("input name") return end; LoadConfig(n) end)
+MakeButton(cfgGrid, "Delete config", function() local n = cfgNameBox.Text:gsub("^%s+", ""):gsub("%s+$", ""); if n == "" then Toast("input name") return end; DeleteConfig(n); cfgDrop.SetOptions(ListConfigNames()) end)
+MakeButton(cfgGrid, "refresh list", function() cfgDrop.SetOptions(ListConfigNames()); Toast("refreshed") end)
 local autoOn0, autoName0 = GetAutoLoad()
 MakeToggle(cfg, "Set as auto load", autoOn0, function(on) local n = cfgNameBox.Text:gsub("^%s+", ""):gsub("%s+$", ""); if n == "" then n = "default" end; SetAutoLoad(on, n); Toast(on and ("Execute will auto load: " .. n) or "close auto load") end, false)
 MakeText(cfg, "Config save in directory RealYo_Configs", COL.TextDim)
 
 local sc14 = ScrollOf(pages[1][4])
 MakeSection(sc14, "theme")
-local themeOptions = { T("Classic"), T("Deep Blue"), T("Cyber"), T("DeepRed") }
-MakeDropdown(sc14, "theme", themeOptions, T("Classic"), function(opt)
+local themeOptions = { "Classic", "Deep Blue", "Cyber", "DeepRed" }
+MakeDropdown(sc14, "theme", themeOptions, "Classic", function(opt)
     local nameMap = { Classic = "Classic", ["Deep Blue"] = "Deep Blue", Cyber = "Cyber", DeepRed = "DeepRed" }
     ApplyTheme(nameMap[opt] or opt)
 end)
@@ -228,7 +228,7 @@ MakeDropdown(sc14, "Font", { "Gotham", "SciFi", "SourceSans", "FredokaOne", "Cod
 MakeSection(sc14, "RGB")
 local pickerTarget = "UI bottom"
 local pickerInfoLabel = nil
-MakeDropdown(sc14, "Color target", { "UI bottom", "package", "Main text", "Dark text", "Emphasis color", "Frame" }, "UI bottom", function(o) pickerTarget = o; if pickerInfoLabel then pickerInfoLabel.Text = T("Target: ") .. T(o) end; Toast(T("Color target") .. ": " .. T(o)) end)
+MakeDropdown(sc14, "Color target", { "UI bottom", "package", "Main text", "Dark text", "Emphasis color", "Frame" }, "UI bottom", function(o) pickerTarget = o; if pickerInfoLabel then pickerInfoLabel.Text = "Target: " .. o end; Toast("Color target" .. ": " .. o) end)
 pickerInfoLabel = MakeText(sc14, "Target: UI bottom", COL.TextDim)
 MakeColorPicker(sc14)
 
@@ -305,4 +305,4 @@ if autoOn0 and autoName0 then task.delay(1, function() LoadConfig(autoName0) end
 taskWait(0.5)
 Toast("Loaded，HWID: " .. DEVICE_ID)
 taskWait(0.5)
-Toast(">>Loaded Successfully")
+Toast("Loaded Successfully")
