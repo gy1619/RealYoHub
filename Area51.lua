@@ -1,7 +1,5 @@
--- area51.lua | RealYoHub V1.2.5 (PremiumUI GameBridge auto-handshake)
--- 有同品牌宿主 → 自动握手接管（不询问）；无宿主 → 回退 WindUI
--- TODO(future): 握手前询问框（WindUI Popup / PremiumUI Prompt），接在 AUTO_ACCEPT 处
-
+-- area51.lua | RealYoHub (PremiumUI GameBridge auto-handshake)
+-- 第一行必须是本注释块：用于确认 GitHub 上是 handshake 版
 local GAME = { Name = "RealYoHub Area51", Brand = "PremiumUI" }
 
 local Players = game:GetService("Players")
@@ -15,32 +13,54 @@ _G.savedPosition = _G.savedPosition or nil
 local Runtime = { Mode = "Original", Bridge = nil, Host = nil }
 
 -------------------------------------------------
--- 1) 宿主检测（自动，暂无询问）
+-- 1) 宿主检测（5秒重试 + 自诊断）
 -------------------------------------------------
-local function GetHostUI()
-    local ok, ret = pcall(function()
-        return shared.PremiumUI or _G.PremiumUI or (getgenv and getgenv().PremiumUI)
-    end)
-    return (ok and type(ret) == "table") and ret or nil
+local AUTO_ACCEPT = true -- future: 改成询问框结果
+
+local function FindHostUI(timeout)
+    timeout = timeout or 5
+    local sources = {
+        { name = "shared",  get = function() return shared and shared.PremiumUI end },
+        { name = "_G",      get = function() return _G and _G.PremiumUI end },
+        { name = "getgenv", get = function()
+            local ok, g = pcall(getgenv)
+            return ok and g and g.PremiumUI
+        end },
+    }
+    local deadline = tick() + timeout
+    local why = "三个注册表全空：宿主未发布（末尾 Publish 块没加/宿主没跑完）"
+    while true do
+        for _, src in ipairs(sources) do
+            local ok, obj = pcall(src.get)
+            if ok and type(obj) == "table" then
+                if obj.IsPremiumUI ~= true then
+                    why = "命中 " .. src.name .. " 但 IsPremiumUI=false"
+                elseif obj.Brand ~= GAME.Brand then
+                    why = "命中 " .. src.name .. " 但品牌不符: " .. tostring(obj.Brand)
+                elseif type(obj.RequestGameBridge) ~= "function" or type(obj.RenameMain) ~= "function" then
+                    why = "命中 " .. src.name .. " 但缺 Bridge/Rename API（宿主是未补装的旧单体版）"
+                elseif obj.Initialized ~= true then
+                    why = "命中 " .. src.name .. " 但宿主尚未初始化"
+                else
+                    return obj, src.name
+                end
+            end
+        end
+        if tick() >= deadline then break end
+        task.wait(0.2)
+    end
+    return nil, why
 end
 
-local HostUI = GetHostUI()
+local HostUI, whyOrSrc = FindHostUI(5)
 
-local function HostReady()
-    local ok, r = pcall(function()
-        return HostUI
-            and HostUI.IsPremiumUI == true
-            and HostUI.Brand == GAME.Brand
-            and HostUI.Initialized == true
-            and type(HostUI.RequestGameBridge) == "function"
-            and type(HostUI.RenameMain) == "function"
-    end)
-    return ok and r == true
+if HostUI then
+    print(("[RealYoHub] 检测到宿主(via %s)，自动握手"):format(whyOrSrc))
+else
+    warn("[RealYoHub] 未握手，回退 WindUI。原因: " .. tostring(whyOrSrc))
 end
 
-local AUTO_ACCEPT = true -- future: 由询问框结果决定
-
-if AUTO_ACCEPT and HostReady() then
+if AUTO_ACCEPT and HostUI then
     local ok, bridgeOrErr = HostUI:RequestGameBridge({
         Brand = GAME.Brand,
         Protocol = HostUI.BridgeProtocol or 2,
@@ -60,7 +80,7 @@ if AUTO_ACCEPT and HostReady() then
 end
 
 -------------------------------------------------
--- 2) 改名（核心同 tab 聚合 / 通用进空白 tab / 替换即改名）
+-- 2) 接管映射改名（核心同tab聚合 / 通用进空白tab / 替换即改名）
 -------------------------------------------------
 if Runtime.Mode == "Host" then
     HostUI:RenameMain(4, "RealYoHub")
@@ -83,7 +103,7 @@ local function Notify(title, content, duration, icon)
 end
 
 -------------------------------------------------
--- 4) UI 适配器（功能代码只写一遍）
+-- 4) 适配器
 -------------------------------------------------
 local function BridgeAdapter(bridge)
     local A = { _b = bridge }
@@ -116,7 +136,7 @@ local function WindAdapter(tab)
 end
 
 -------------------------------------------------
--- 5) 功能模块（原逻辑 1:1 保留，仅 UI 调用走适配器）
+-- 5) 功能模块（逻辑 1:1 保留）
 -------------------------------------------------
 local function BuildArea51(A)
     local speedHackConnection = nil
@@ -554,7 +574,7 @@ if Runtime.Mode == "Host" then
     bridge:UsePageIndex(4, 3, "Replace") BuildTeleport(BridgeAdapter(bridge))
     bridge:UsePageIndex(2, 2, "Replace") BuildFETools(BridgeAdapter(bridge))
     bridge:Focus()
-    Notify("RealYoHub", "Handshake OK - hosted by Pixel", 6, "crown")
+    Notify("RealYoHub", "Handshake OK - hosted by PremiumUI", 6, "crown")
 else
     local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
 
@@ -562,7 +582,7 @@ else
     local function LoadScript() createUI() end
 
     WindUI:Popup({
-        Title = "RealYoHub V1.3 ",
+        Title = "RealYoHub V1.2.4 ",
         IconThemed = true,
         Content = "Welcome  " .. LocalPlayer.Name .. "\nArea 51 All ready ",
         Buttons = {
@@ -573,9 +593,9 @@ else
 
     createUI = function()
         local Window = WindUI:CreateWindow({
-            Title = "RealYoHub V1.3",
+            Title = "RealYoHub V1.2.4",
             Icon = "palette",
-            Author = "Welcome " .. LocalPlayer.Name .. "\nMade by PixelSze",
+            Author = "Welcome " .. LocalPlayer.Name .. "\nMade by KevinSze",
             Folder = "Premium",
             Size = UDim2.fromOffset(550, 380),
             Theme = "Light",
