@@ -66,8 +66,8 @@ local DEVICE_ID = HashStr(LocalPlayer.UserId .. "_" .. GetHWID()) .. HashStr("Re
 Lib.DEVICE_ID = DEVICE_ID
 
 local License = {
-Mode = "open", Status = "當前開放 (無需卡密)",
-Remain = "暫時免費  無須獲取密", BoundDevice = DEVICE_ID,
+Mode = "open", Status = "Free",
+Remain = "temporarily Keyless", BoundDevice = DEVICE_ID,
 }
 Lib.License = License
 
@@ -114,32 +114,32 @@ end
 Lib.Toast = Toast
 
 local function SaveConfig(name)
-if not FileSupport() then Toast("當前注入器不支持文件保存") return end
+if not FileSupport() then Toast("fail") return end
 local data = {}
 for _, e in ipairs(SettingRegistry) do data[e.name] = e.get() end
 EnsureFolder()
 local ok = pcall(function() writefile(CFG_DIR .. "/" .. name .. ".json", HttpService:JSONEncode(data)) end)
-Toast(ok and ("配置已保存: " .. name) or "保存失敗")
+Toast(ok and ("saved: " .. name) or "fail")
 end
 Lib.SaveConfig = SaveConfig
 
 local function LoadConfig(name)
-if not FileSupport() then Toast("當前注入器不支持文件讀取") return end
+if not FileSupport() then Toast("fail") return end
 local path = CFG_DIR .. "/" .. name .. ".json"
 local ok, raw = pcall(function() if not isfile(path) then return nil end return readfile(path) end)
-if not ok or not raw then Toast("配置不存在: " .. name) return end
+if not ok or not raw then Toast("not found: " .. name) return end
 local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
-if not ok2 or type(data) ~= "table" then Toast("配置損壞: " .. name) return end
+if not ok2 or type(data) ~= "table" then Toast("config broke: " .. name) return end
 local count = 0
 for _, e in ipairs(SettingRegistry) do if data[e.name] ~= nil then e.set(data[e.name]); count = count + 1 end end
-Toast(("配置已讀取: %s (%d項)"):format(name, count))
+Toast(("config readed: %s (%d項)"):format(name, count))
 end
 Lib.LoadConfig = LoadConfig
 
 local function DeleteConfig(name)
-if not FileSupport() then Toast("當前注入器不支持文件刪除") return end
+if not FileSupport() then Toast("fail") return end
 local ok = pcall(function() if isfile(CFG_DIR .. "/" .. name .. ".json") then delfile(CFG_DIR .. "/" .. name .. ".json") end end)
-Toast(ok and ("配置已刪除: " .. name) or "刪除失敗")
+Toast(ok and ("deleted: " .. name) or "fail")
 end
 Lib.DeleteConfig = DeleteConfig
 
@@ -153,7 +153,7 @@ end
 Lib.GetAutoLoad = GetAutoLoad
 
 local function SetAutoLoad(enabled, name)
-if not FileSupport() then Toast("當前注入器不支持文件保存") return end
+if not FileSupport() then Toast("fail") return end
 EnsureFolder()
 pcall(function() writefile(AUTO_FILE, HttpService:JSONEncode({ enabled = enabled, name = name })) end)
 end
@@ -244,7 +244,7 @@ end
 
 local sideW = S(150)
 local sidePad, sideBtnH, sideGap = S(6), S(40), S(6)
-local mainNames = { "首頁設置", "繪制面板", "通用功能", "腳本中心" }
+local mainNames = { "Info", "ESP", "FE", "ScriptHub" }
 local sideH = S(28) + sidePad + #mainNames * sideBtnH + (#mainNames - 1) * sideGap + sidePad
 local mainW, mainH = S(640), S(520)
 local rightW, rightH = S(170), S(420)
@@ -256,10 +256,10 @@ local mainY = (vpSize.Y - mainH) / 2
 local rightY = (vpSize.Y - rightH) / 2
 
 local subNameSets = {
-{ "公告相關", "其他相關", "配置相關", "界面相關" },
-{ "透視相關", "方框相關", "骨骼相關", "距離相關" },
-{ "移動相關", "角色相關", "世界相關", "實用相關" },
-{ "自家腳本", "免卡腳本", "需卡密腳本", "通用管理員" },
+{ "Annc", "Other", "Config", "Theme" },
+{ "ESP", "Nor yet", "Not yet", "Not yet" },
+{ "Movement", "Character", "World", "Practical" },
+{ "RealYoHub", "Keyless Script", "Keys Script", "Admin" },
 }
 
 local function EstW(text, size)
@@ -599,16 +599,16 @@ if not t then return end
 for k, v in pairs(t) do AP[k] = v end
 COL.PillGray = AP.Panel; COL.TextDark = AP.Text; COL.TextDim = AP.Dim; COL.Red = AP.Accent
 QueueApply()
-Toast("主題: " .. name)
+Toast("Theme: " .. name)
 end
 
 local function SetTargetColor(target, col)
-if target == "UI底" then AP.Panel = col; AP.PanelT = 0.1
-elseif target == "組件" then AP.Comp = col; AP.CompT = 0.15
-elseif target == "主文字" then AP.Text = col; COL.TextDark = col
-elseif target == "暗文字" then AP.Dim = col; COL.TextDim = col
-elseif target == "強調色" then AP.Accent = col; COL.Red = col
-elseif target == "邊框" then AP.Border = col; AP.BorderRainbow = false end
+if target == "UI bottom" then AP.Panel = col; AP.PanelT = 0.1
+elseif target == "package" then AP.Comp = col; AP.CompT = 0.15
+elseif target == "main text" then AP.Text = col; COL.TextDark = col
+elseif target == "dark text" then AP.Dim = col; COL.TextDim = col
+elseif target == "emphasis color" then AP.Accent = col; COL.Red = col
+elseif target == "frame" then AP.Border = col; AP.BorderRainbow = false end
 QueueApply()
 end
 
@@ -620,10 +620,10 @@ for _, d in ipairs(ScreenGui:GetDescendants()) do
 if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then d.Font = f end
 end
 end
-Toast("字體: " .. fontName)
+Toast("font: " .. fontName)
 end
 
-local pickerTarget = "UI底"
+local pickerTarget = "UI bottom"
 local pickerInfoLabel = nil
 local function MakeColorPicker(parent)
 local holder = Create("Frame", {
@@ -658,9 +658,9 @@ AddCorner(knob, S(3))
 Create("UIStroke", { Thickness = 1, Color = Color3.new(0, 0, 0), Transparency = 0.4 }, knob)
 return { track = track, grad = grad, knob = knob }
 end
-local barH = makeBar("色相", S(8))
-local barS = makeBar("飽和", S(32))
-local barV = makeBar("明度", S(56))
+local barH = makeBar("H", S(8))
+local barS = makeBar("S", S(32))
+local barV = makeBar("V", S(56))
 barH.grad.Color = RAINBOW_SEQ
 local function render()
 local hueCol = Color3.fromHSV(h, 1, 1)
@@ -675,7 +675,7 @@ local function fire()
 local col = Color3.fromHSV(h, s, v)
 SetTargetColor(pickerTarget, col)
 if pickerInfoLabel then
-    pickerInfoLabel.Text = ("目標: " .. pickerTarget .. " RGB(%d,%d,%d)"):format(math.floor(col.R * 255), math.floor(col.G * 255), math.floor(col.B * 255))
+    pickerInfoLabel.Text = ("Target: " .. pickerTarget .. " RGB(%d,%d,%d)"):format(math.floor(col.R * 255), math.floor(col.G * 255), math.floor(col.B * 255))
 end
 end
 local function bindBar(bar, id)
@@ -708,7 +708,7 @@ local function MakeInlineAlphaSlider(flow)
 local row = flow.Add(S(210), S(20))
 local lab = Create("TextLabel", {
 Size = UDim2.fromOffset(S(64), S(16)), Position = UDim2.fromOffset(0, 0.5, -S(8)), BackgroundTransparency = 1,
-Text = "UI透明度", TextColor3 = COL.TextDim, TextSize = TS(11), Font = Enum.Font.Gotham,
+Text = "UI Tran", TextColor3 = COL.TextDim, TextSize = TS(11), Font = Enum.Font.Gotham,
 TextXAlignment = Enum.TextXAlignment.Left, Parent = row,
 })
 local track = Create("Frame", {
@@ -938,12 +938,12 @@ end
 local function FindPageIndices(category, sub)
 category = tostring(category):gsub("%s+", "")
 sub = tostring(sub):gsub("%s+", "")
-local mNames = Lib._mainNames or { "首頁設置", "繪制面板", "通用功能", "腳本中心" }
+local mNames = Lib._mainNames or { "Info", "ESP", "FE", "ScriptHub" }
 local sSets = Lib._subNameSets or {
-{ "公告相關", "其他相關", "配置相關", "界面相關" },
-{ "透視相關", "方框相關", "骨骼相關", "距離相關" },
-{ "移動相關", "角色相關", "世界相關", "實用相關" },
-{ "自家腳本", "免卡腳本", "需卡密腳本", "通用管理員" },
+{ "Annc", "Other", "Config", "Theme" },
+{ "ESP", "Nor yet", "Not yet", "Not yet" },
+{ "Movement", "Character", "World", "Practical" },
+{ "RealYoHub", "Keyless Script", "Keys Script", "Admin" },
 }
 for m, mn in ipairs(mNames) do
 if tostring(mn):gsub("%s+", "") == category then
@@ -1051,8 +1051,8 @@ payload = payload or {}
 if payload.Brand ~= self.Brand then return false, "brand_mismatch" end
 if payload.Protocol and payload.Protocol ~= self.BridgeProtocol then return false, "protocol_mismatch" end
 if not self.Initialized then return false, "ui_not_initialized" end
-local category = tostring(payload.Category or "腳本中心"):gsub("%s+", "")
-local sub = tostring(payload.Sub or "自家腳本"):gsub("%s+", "")
+local category = tostring(payload.Category or "Script Hu."):gsub("%s+", "")
+local sub = tostring(payload.Sub or "RealYoHub"):gsub("%s+", "")
 local m, j = FindPageIndices(category, sub)
 if not m or not j then return false, "page_not_found: " .. category .. "/" .. sub end
 local scroll = self.GetScroll(m, j)
@@ -1077,5 +1077,5 @@ pcall(function() _G.RealYoUI = Lib end)
 pcall(function() if getgenv then getgenv().RealYoUI = Lib end end)
 end
 PublishHost()
-print(">>> [RealYoUI] Host published: shared/_G/getgenv RealYoUI ready, BridgeProtocol=2")
+Toast("Host published: shared/_G/getgenv UI ready, BridgeProtocol=2")
 return Lib
