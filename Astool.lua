@@ -1,10 +1,10 @@
--- PremiumUI.lua
--- PremiumUI Standalone UI Library + GameBridge Takeover Protocol V3.4 (Google Translate Integration)
+-- RealYoUI.lua
+-- RealYoUI Standalone UI Library + GameBridge Takeover Protocol V3.4 (Google Translate Integration)
 local Lib = {
     Version = "3.4.0",
-    Brand = "PremiumUI",
+    Brand = "RealYoUI",
     BridgeProtocol = 2,
-    IsPremiumUI = true,
+    IsRealYoUI = true,
     Initialized = false,
 }
 
@@ -154,7 +154,7 @@ local function HashStr(s)
 end
 Lib.HashStr = HashStr
 
-local DEVICE_ID = HashStr(LocalPlayer.UserId .. "_" .. GetHWID()) .. HashStr("PremiumUI_SZE" .. LocalPlayer.UserId)
+local DEVICE_ID = HashStr(LocalPlayer.UserId .. "_" .. GetHWID()) .. HashStr("RealYoUI_SZE" .. LocalPlayer.UserId)
 Lib.DEVICE_ID = DEVICE_ID
 
 local License = {
@@ -169,7 +169,7 @@ local function RegisterSetting(name, kind, get, set)
 end
 Lib.RegisterSetting = RegisterSetting
 
-local CFG_DIR = "PremiumUI_Configs"
+local CFG_DIR = "RealYoUI_Configs"
 local AUTO_FILE = CFG_DIR .. "/_autoload_.json"
 local function FileSupport() return type(writefile) == "function" and type(readfile) == "function" and type(isfile) == "function" end
 local function EnsureFolder() pcall(function() if type(makefolder) == "function" and not isfolder(CFG_DIR) then makefolder(CFG_DIR) end end) end
@@ -909,7 +909,7 @@ function Lib:Initialize(opts)
     opts = opts or {}
 
     ScreenGui = Create("ScreenGui", {
-        Name = "PremiumUI_SZE" .. math.random(10000, 99999), ResetOnSpawn = false,
+        Name = "RealYoUI_SZE" .. math.random(10000, 99999), ResetOnSpawn = false,
         IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     })
     ScreenGui.Parent = (okCore and CoreGuiService) or LocalPlayer:WaitForChild("PlayerGui")
@@ -1216,11 +1216,11 @@ end
 -- Host Publish (秒刷发布)
 -------------------------------------------------
 local function PublishHost()
-    pcall(function() shared.PremiumUI = Lib end)
-    pcall(function() _G.PremiumUI = Lib end)
-    pcall(function() if getgenv then getgenv().PremiumUI = Lib end end)
+    pcall(function() shared.RealYoUI = Lib end)
+    pcall(function() _G.RealYoUI = Lib end)
+    pcall(function() if getgenv then getgenv().RealYoUI = Lib end end)
 end
 PublishHost()
-print(">>> [PremiumUI] Host published: shared/_G/getgenv PremiumUI ready, BridgeProtocol=2")
+print("Host published: shared/_G/getgenv RealYoUI ready, BridgeProtocol=2")
 
 return Lib
