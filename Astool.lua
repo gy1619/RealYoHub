@@ -1,8 +1,8 @@
 -- PremiumUI.lua
--- PremiumUI Standalone UI Library + GameBridge Takeover Protocol V3.1
--- FIX: AddCorner 必须定义在 Toast 之前（Lua upvalue 作用域），否则 Toast 调用 nil 全局崩溃
+-- PremiumUI Standalone UI Library + GameBridge Takeover Protocol V3.1.1
+-- FIX(194): AddCorner 必须在 Toast 之前定义（Lua upvalue 作用域），否则 Toast 调用 nil 全局
 local Lib = {
-    Version = "3.1.0",
+    Version = "3.1.1",
     Brand = "PremiumUI",
     BridgeProtocol = 2,
     IsPremiumUI = true,
@@ -42,7 +42,7 @@ local function Create(class, props, parent)
 end
 Lib.Create = Create
 
--- ★ 关键修复：AddCorner 提前定义，保证 Toast 等早期函数能捕获到它
+-- ★★ 关键修复：AddCorner 提前到 Create 之后、Toast 之前 ★★
 local function AddCorner(parent, r) return Create("UICorner", { CornerRadius = UDim.new(0, r) }, parent) end
 Lib.AddCorner = AddCorner
 
@@ -878,7 +878,7 @@ local function LoadAvatar()
         if model.PrimaryPart then model:PivotTo(CFrame.new(0, 0, 0) * CFrame.Angles(0, math.rad(180), 0)) end
     end)
     if not ok3d then
-        -- fallback: keep viewport empty
+        -- fallback: keep viewport empty (harmless)
     end
 end
 Lib.LoadAvatar = LoadAvatar
@@ -1038,7 +1038,7 @@ function Lib:Initialize(opts)
 end
 
 -------------------------------------------------
--- GameBridge Protocol V2 (Takeover) - 真实实现
+-- GameBridge Protocol V2 (Takeover) - 真实可用实现
 -------------------------------------------------
 local function FindPageIndices(category, sub)
     for m, mn in ipairs(mainNames) do
