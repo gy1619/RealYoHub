@@ -1034,7 +1034,7 @@ function Lib:Initialize(opts)
     self.ApplyTheme = ApplyTheme
     self.SetTargetColor = SetTargetColor
     self.ApplyFont = ApplyFont
-    self.GetScroll = function(m, j) return pages[m][j]:FindFirstChildOfClass("ScrollingFrame") end
+    self.GetScroll = function(_, m, j) return pages[m][j]:FindFirstChildOfClass("ScrollingFrame") end
 
     self.Initialized = true
     return self
