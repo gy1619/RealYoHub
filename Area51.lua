@@ -1,6 +1,6 @@
--- area51.lua | RealYoHub (PremiumUI GameBridge auto-handshake)
+-- area51.lua | RealYoHub (RealYoUI GameBridge auto-handshake)
 -- 第一行必须是本注释：用于确认 GitHub 上是 handshake 版
-local GAME = { Name = "RealYoHub Area51", Brand = "PremiumUI" }
+local GAME = { Name = "RealYoHub Area51", Brand = "RealYoUI" }
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -27,11 +27,11 @@ local AUTO_ACCEPT = true -- future: 改成询问框结果
 local function FindHostUI(timeout)
     timeout = timeout or 5
     local sources = {
-        { name = "shared",  get = function() return shared and shared.PremiumUI end },
-        { name = "_G",      get = function() return _G and _G.PremiumUI end },
+        { name = "shared",  get = function() return shared and shared.RealYoUI end },
+        { name = "_G",      get = function() return _G and _G.RealYoUI end },
         { name = "getgenv", get = function()
             local ok, g = pcall(getgenv)
-            return ok and g and g.PremiumUI
+            return ok and g and g.RealYoUI
         end },
     }
     local deadline = tick() + timeout
@@ -40,8 +40,8 @@ local function FindHostUI(timeout)
         for _, src in ipairs(sources) do
             local ok, obj = pcall(src.get)
             if ok and type(obj) == "table" then
-                if obj.IsPremiumUI ~= true then
-                    why = "命中 " .. src.name .. " 但 IsPremiumUI=false"
+                if obj.IsRealYoUI ~= true then
+                    why = "命中 " .. src.name .. " 但 IsRealYoUI=false"
                 elseif obj.Brand ~= GAME.Brand then
                     why = "命中 " .. src.name .. " 但品牌不符: " .. tostring(obj.Brand)
                 elseif type(obj.RequestGameBridge) ~= "function" or type(obj.RenameMain) ~= "function" then
@@ -588,7 +588,7 @@ if Runtime.Mode == "Host" then
     end)
     SafeCall("Focus", function() bridge:Focus() end)
 
-    Notify("RealYoHub", "Handshake OK - hosted by PremiumUI", 6, "crown")
+    Notify("RealYoHub", "Handshake OK - hosted by RealYoUI", 6, "crown")
 else
     local okWind, WindUI = pcall(function()
         return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
@@ -616,7 +616,7 @@ else
             Title = "RealYoHub V1.2.4",
             Icon = "palette",
             Author = "Welcome " .. LocalPlayer.Name .. "\nMade by KevinSze",
-            Folder = "Premium",
+            Folder = "RealYo",
             Size = UDim2.fromOffset(550, 380),
             Theme = "Light",
             User = { Enabled = true, Anonymous = true },
