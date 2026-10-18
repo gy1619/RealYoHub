@@ -72,21 +72,24 @@ else
 end
 
 if AUTO_ACCEPT and HostUI then
-    local ok, bridgeOrErr = HostUI:RequestGameBridge({
-        Brand = GAME.Brand,
-        Protocol = HostUI.BridgeProtocol or 2,
-        Name = GAME.Name,
-        Category = "腳本中心",
-        Sub = "自家腳本",
-        Mode = "Replace",
-        Focus = false,
-    })
-    if ok and type(bridgeOrErr) == "table" then
+    local ok, success, bridgeOrErr = pcall(function()
+        return HostUI:RequestGameBridge({
+            Brand = GAME.Brand,
+            Protocol = HostUI.BridgeProtocol or 2,
+            Name = GAME.Name,
+            Category = "腳本中心",
+            Sub = "自家腳本",
+            Mode = "Replace",
+            Focus = false,
+        })
+    end)
+    if ok and success == true and type(bridgeOrErr) == "table" then
         Runtime.Mode = "Host"
         Runtime.Bridge = bridgeOrErr
         Runtime.Host = HostUI
+        print("[RealYoHub] bridge obtained, Mode=Host")
     else
-        warn("[RealYoHub] handshake failed:", tostring(bridgeOrErr))
+        warn("[RealYoHub][ERR] RequestGameBridge: " .. tostring(ok and bridgeOrErr or success))
     end
 end
 
@@ -661,3 +664,4 @@ else
         Window:AutoSaveConfig(true)
     end
 end
+print(("[RealYoHub] script finished: Mode=%s"):format(Runtime.Mode))
