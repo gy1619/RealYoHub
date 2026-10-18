@@ -77,8 +77,8 @@ if AUTO_ACCEPT and HostUI then
             Brand = GAME.Brand,
             Protocol = HostUI.BridgeProtocol or 2,
             Name = GAME.Name,
-            Category = "腳本中心",
-            Sub = "自家腳本",
+            Category = "腳本中心",   -- 删掉空格
+            Sub = "自家腳本",       -- 删掉空格
             Mode = "Replace",
             Focus = false,
         })
