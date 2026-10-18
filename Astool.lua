@@ -1034,16 +1034,23 @@ function Lib:Initialize(opts)
     self.ApplyTheme = ApplyTheme
     self.SetTargetColor = SetTargetColor
     self.ApplyFont = ApplyFont
-    self.GetScroll = function(_, m, j) return pages[m][j]:FindFirstChildOfClass("ScrollingFrame") end
+    self.GetScroll = function(_, m, j) 
+    if pages[m] and pages[m][j] then 
+        return pages[m][j]:FindFirstChildOfClass("ScrollingFrame") 
+    end 
+    return nil 
+end
 
     self.Initialized = true
     return self
 end
 
--------------------------------------------------
--- GameBridge Protocol V3 (Takeover) - 真实可用实现
--------------------------------------------------
+--- GameBridge Protocol V3 (Takeover) - 最终防御版
 local function FindPageIndices(category, sub)
+    -- 强制去空格
+    category = tostring(category):gsub("%s+", "")
+    sub = tostring(sub):gsub("%s+", "")
+    
     local mNames = Lib._mainNames or { "首頁設置", "繪制面板", "通用功能", "腳本中心" }
     local sSets = Lib._subNameSets or {
         { "公告相關", "其他相關", "配置相關", "界面相關" },
@@ -1052,9 +1059,9 @@ local function FindPageIndices(category, sub)
         { "自家腳本", "免卡腳本", "需卡密腳本", "通用管理員" },
     }
     for m, mn in ipairs(mNames) do
-        if mn == category then
+        if tostring(mn):gsub("%s+", "") == category then
             for j, sn in ipairs(sSets[m] or {}) do
-                if sn == sub then return m, j end
+                if tostring(sn):gsub("%s+", "") == sub then return m, j end
             end
             return m, nil
         end
@@ -1155,44 +1162,4 @@ function Lib:RenameSub(m, j, newName)
     end
     return false
 end
-
-function Lib:RequestGameBridge(payload)
-    payload = payload or {}
-    if payload.Brand ~= self.Brand then return false, "brand_mismatch" end
-    if payload.Protocol and payload.Protocol ~= self.BridgeProtocol then return false, "protocol_mismatch" end
-    if not self.Initialized then return false, "ui_not_initialized" end
-
-    local category = payload.Category or "腳本中心"
-    local sub = payload.Sub or "自家腳本"
-    local m, j = FindPageIndices(category, sub)
-    if not m or not j then return false, "page_not_found" end
-    local scroll = self:GetScroll(m, j)
-    if not scroll then return false, "page_not_ready" end
-
-    if payload.Mode ~= "Append" then
-        for _, c in ipairs(scroll:GetChildren()) do
-            if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
-        end
-    end
-
-    local bridge = setmetatable({
-        UI = self, Name = payload.Name or "GameScript", Active = true,
-        Protocol = self.BridgeProtocol, Host = scroll, MainIndex = m, SubIndex = j,
-    }, BridgeMeta)
-
-    if payload.Focus then bridge:Focus() end
-    return true, bridge
-end
-
--------------------------------------------------
--- Host Publish (秒刷发布)
--------------------------------------------------
-local function PublishHost()
-    pcall(function() shared.PremiumUI = Lib end)
-    pcall(function() _G.PremiumUI = Lib end)
-    pcall(function() if getgenv then getgenv().PremiumUI = Lib end end)
-end
-PublishHost()
-print(">>> [PremiumUI] Host published: shared/_G/getgenv PremiumUI ready, BridgeProtocol=2")
-
 return Lib
