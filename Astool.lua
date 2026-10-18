@@ -1,6 +1,5 @@
 -- PremiumUI.lua
--- PremiumUI Standalone UI Library + GameBridge Takeover Protocol V3.1.1
--- FIX(194): AddCorner 必须在 Toast 之前定义（Lua upvalue 作用域），否则 Toast 调用 nil 全局
+-- PremiumUI Standalone UI Library + GameBridge Takeover Protocol V3.2
 local Lib = {
     Version = "3.2.0",
     Brand = "PremiumUI",
@@ -41,7 +40,7 @@ local function Create(class, props, parent)
 end
 Lib.Create = Create
 
--- ★★ 关键修复：AddCorner 提前到 Create 之后、Toast 之前 ★★
+-- ★ 关键修复：AddCorner 必须在 Toast 之前定义
 local function AddCorner(parent, r) return Create("UICorner", { CornerRadius = UDim.new(0, r) }, parent) end
 Lib.AddCorner = AddCorner
 
@@ -876,9 +875,6 @@ local function LoadAvatar()
         root.Anchored = true
         if model.PrimaryPart then model:PivotTo(CFrame.new(0, 0, 0) * CFrame.Angles(0, math.rad(180), 0)) end
     end)
-    if not ok3d then
-        -- fallback: keep viewport empty (harmless)
-    end
 end
 Lib.LoadAvatar = LoadAvatar
 
@@ -888,6 +884,7 @@ local function SetLanguage(lang)
     ApplyLanguage()
     Toast(lang == "en" and "Language: English" or "語言: 中文")
 end
+Lib.SetLanguage = SetLanguage
 
 function Lib:Initialize(opts)
     if self.Initialized then return self end
@@ -987,6 +984,14 @@ function Lib:Initialize(opts)
         TweenService:Create(TopIndicator, EASE, { Position = UDim2.new((j - 1) * 0.25, S(5), 0, S(6)) }):Play()
         SlideToPage(pages[currentMain][j], dir, 0)
     end
+
+    -- ★ 关键修复：暴露局部变量给 Bridge 协议使用
+    self._mainNames = mainNames
+    self._subNameSets = subNameSets
+    self._sideButtons = sideButtons
+    self._topButtons = topButtons
+    self._refreshTopNames = RefreshTopNames
+    self._getCurrentMain = function() return currentMain end
     self._selectMain = SelectMain
     self._selectSub = SelectSub
 
@@ -998,13 +1003,6 @@ function Lib:Initialize(opts)
         local b = Create("TextButton", { Size = UDim2.new(0.25, 0, 1, 0), BackgroundTransparency = 1, Text = T(name), TextColor3 = (j == 1) and COL.White or COL.TextDark, Font = Enum.Font.GothamBold, TextSize = TS(13), AutoButtonColor = false, Parent = TopList })
         topButtons[j] = b; SafeClick(b, function() SelectSub(j) end); RegisterLang(b, name)
     end
-
-self._sideButtons = sideButtons
-    self._topButtons = topButtons
-    self._mainNames = mainNames
-    self._subNameSets = subNameSets
-    self._refreshTopNames = RefreshTopNames
-    self._getCurrentMain = function() return currentMain end
 
     local ballSize = S(56)
     local Ball = Create("TextButton", { Size = UDim2.fromOffset(ballSize, ballSize), Position = UDim2.fromOffset(S(14), (vpSize.Y - ballSize) / 2), BackgroundTransparency = 1, Text = "", AutoButtonColor = false, Parent = ScreenGui })
@@ -1033,7 +1031,6 @@ self._sideButtons = sideButtons
     self.MakeDropdown = MakeDropdown
     self.MakeColorPicker = MakeColorPicker
     self.MakeInlineAlphaSlider = MakeInlineAlphaSlider
-    self.SetLanguage = SetLanguage
     self.ApplyTheme = ApplyTheme
     self.SetTargetColor = SetTargetColor
     self.ApplyFont = ApplyFont
@@ -1044,12 +1041,19 @@ self._sideButtons = sideButtons
 end
 
 -------------------------------------------------
--- GameBridge Protocol V2 (Takeover) - 真实可用实现
+-- GameBridge Protocol V3 (Takeover) - 真实可用实现
 -------------------------------------------------
 local function FindPageIndices(category, sub)
-    for m, mn in ipairs(mainNames) do
+    local mNames = Lib._mainNames or { "首頁設置", "繪制面板", "通用功能", "腳本中心" }
+    local sSets = Lib._subNameSets or {
+        { "公告相關", "其他相關", "配置相關", "界面相關" },
+        { "透視相關", "方框相關", "骨骼相關", "距離相關" },
+        { "移動相關", "角色相關", "世界相關", "實用相關" },
+        { "自家腳本", "免卡腳本", "需卡密腳本", "通用管理員" },
+    }
+    for m, mn in ipairs(mNames) do
         if mn == category then
-            for j, sn in ipairs(subNameSets[m]) do
+            for j, sn in ipairs(sSets[m] or {}) do
                 if sn == sub then return m, j end
             end
             return m, nil
@@ -1057,95 +1061,12 @@ local function FindPageIndices(category, sub)
     end
     return nil, nil
 end
-Lib.FindPage = FindPageIndices
 
-local function ClearPageScroll(scroll)
-    if not scroll then return end
-    for _, c in ipairs(scroll:GetChildren()) do
-        if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
-    end
-    flowByScroll[scroll] = nil
-end
-
-local BridgeMeta = {}
-BridgeMeta.__index = BridgeMeta
-
-function BridgeMeta:UsePage(category, sub, mode)
-    local m, j = FindPageIndices(category, sub)
-    if not m or not j then return false, "page_not_found" end
-    local scroll = self.UI:GetScroll(m, j)
-    if not scroll then return false, "page_not_ready" end
-    if mode ~= "Append" then ClearPageScroll(scroll) end
-    self.Host = scroll; self.MainIndex = m; self.SubIndex = j
-    return true
-end
-
-function BridgeMeta:Focus()
-    if self.MainIndex and self.UI._selectMain then
-        self.UI._selectMain(self.MainIndex)
-        self.UI._selectSub(self.SubIndex)
-    end
-end
-
-function BridgeMeta:Grid()
-    local g = CreateGrid(self.Host)
-    self.Host = g
-    return g
-end
-
-function BridgeMeta:ResetHost()
-    self.Host = self.UI:GetScroll(self.MainIndex, self.SubIndex)
-    return self.Host
-end
-
-function BridgeMeta:ClearPage()
-    ClearPageScroll(self.UI:GetScroll(self.MainIndex, self.SubIndex))
-    self:ResetHost()
-end
-
-function BridgeMeta:Create(comp)
-    if type(comp) ~= "table" then return nil, "component_invalid" end
-    local kind = comp.Type or comp.type
-    local host = comp.Host or self.Host
-    local text = comp.Text or comp.text or ""
-    local cb = comp.Callback or comp.callback or comp.OnClick or comp.OnChange
-    if kind == "Label" or kind == "Text" then
-        return MakeText(host, text, comp.Color or COL.TextDark, comp.Size)
-    elseif kind == "Section" then
-        return MakeSection(host, text)
-    elseif kind == "Button" then
-        return MakeButton(host, text, cb)
-    elseif kind == "Toggle" then
-        return MakeToggle(host, text, comp.Default or false, cb, comp.Register)
-    elseif kind == "Slider" then
-        return MakeSlider(host, text, comp.Min or 0, comp.Max or 100, comp.Default or comp.Min or 0, cb)
-    elseif kind == "Dropdown" then
-        local opts = comp.Options or {}
-        return MakeDropdown(host, text, opts, comp.Default or opts[1], cb)
-    elseif kind == "TextBox" or kind == "Input" then
-        return MakeTextBox(host, comp.Placeholder or text, comp.Default or "")
-    elseif kind == "Grid" then
-        return self:Grid()
-    end
-    return nil, "component_unknown:" .. tostring(kind)
-end
-
-function BridgeMeta:Label(text, opts) opts = opts or {}; return self:Create({ Type = "Label", Text = text, Color = opts.Color, Size = opts.Size, Host = opts.Host }) end
-function BridgeMeta:Section(text, opts) opts = opts or {}; return self:Create({ Type = "Section", Text = text, Host = opts.Host }) end
-function BridgeMeta:Button(text, cb, opts) opts = opts or {}; return self:Create({ Type = "Button", Text = text, Callback = cb, Host = opts.Host }) end
-function BridgeMeta:Toggle(text, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Toggle", Text = text, Default = default, Callback = cb, Register = opts.Register, Host = opts.Host }) end
-function BridgeMeta:Slider(text, min, max, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Slider", Text = text, Min = min, Max = max, Default = default, Callback = cb, Host = opts.Host }) end
-function BridgeMeta:Dropdown(text, options, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Dropdown", Text = text, Options = options, Default = default, Callback = cb, Host = opts.Host }) end
-function BridgeMeta:TextBox(placeholder, default, opts) opts = opts or {}; return self:Create({ Type = "TextBox", Placeholder = placeholder, Default = default, Host = opts.Host }) end
-
--------------------------------------------------
--- GameBridge Protocol V3 (Takeover) - 真实实现
--------------------------------------------------
 local BridgeMeta = {}
 BridgeMeta.__index = BridgeMeta
 
 function BridgeMeta:UsePageIndex(m, j, mode)
-    local scroll = Lib:GetScroll(m, j)
+    local scroll = self.UI:GetScroll(m, j)
     if not scroll then return false, "page_not_ready" end
     if mode ~= "Append" then
         for _, c in ipairs(scroll:GetChildren()) do
@@ -1159,20 +1080,20 @@ function BridgeMeta:UsePageIndex(m, j, mode)
 end
 
 function BridgeMeta:Focus()
-    if self.MainIndex and Lib._selectMain then
-        Lib._selectMain(self.MainIndex)
-        Lib._selectSub(self.SubIndex)
+    if self.MainIndex and self.UI._selectMain then
+        self.UI._selectMain(self.MainIndex)
+        self.UI._selectSub(self.SubIndex)
     end
 end
 
 function BridgeMeta:Grid()
-    local g = Lib.CreateGrid(self.Host)
+    local g = self.UI.CreateGrid(self.Host)
     self.Host = g
     return g
 end
 
 function BridgeMeta:ClearPage()
-    local scroll = Lib:GetScroll(self.MainIndex, self.SubIndex)
+    local scroll = self.UI:GetScroll(self.MainIndex, self.SubIndex)
     if scroll then
         for _, c in ipairs(scroll:GetChildren()) do
             if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
@@ -1188,20 +1109,20 @@ function BridgeMeta:Create(comp)
     local text = comp.Text or comp.text or ""
     local cb = comp.Callback or comp.callback or comp.OnClick or comp.OnChange
     if kind == "Label" or kind == "Text" then
-        return Lib.MakeText(host, text, comp.Color or Lib.COL.TextDark, comp.Size)
+        return self.UI.MakeText(host, text, comp.Color or self.UI.COL.TextDark, comp.Size)
     elseif kind == "Section" then
-        return Lib.MakeText(host, text, Lib.COL.TextDim)
+        return self.UI.MakeText(host, text, self.UI.COL.TextDim)
     elseif kind == "Button" then
-        return Lib.MakeButton(host, text, cb)
+        return self.UI.MakeButton(host, text, cb)
     elseif kind == "Toggle" then
-        return Lib.MakeToggle(host, text, comp.Default or false, cb, comp.Register)
+        return self.UI.MakeToggle(host, text, comp.Default or false, cb, comp.Register)
     elseif kind == "Slider" then
-        return Lib.MakeSlider(host, text, comp.Min or 0, comp.Max or 100, comp.Default or comp.Min or 0, cb)
+        return self.UI.MakeSlider(host, text, comp.Min or 0, comp.Max or 100, comp.Default or comp.Min or 0, cb)
     elseif kind == "Dropdown" then
         local opts = comp.Options or {}
-        return Lib.MakeDropdown(host, text, opts, comp.Default or opts[1], cb)
+        return self.UI.MakeDropdown(host, text, opts, comp.Default or opts[1], cb)
     elseif kind == "TextBox" or kind == "Input" then
-        return Lib.MakeTextBox(host, comp.Placeholder or text, comp.Default or "")
+        return self.UI.MakeTextBox(host, comp.Placeholder or text, comp.Default or "")
     elseif kind == "Grid" then
         return self:Grid()
     end
@@ -1243,7 +1164,7 @@ function Lib:RequestGameBridge(payload)
 
     local category = payload.Category or "腳本中心"
     local sub = payload.Sub or "自家腳本"
-    local m, j = Lib.FindPage(category, sub)
+    local m, j = FindPageIndices(category, sub)
     if not m or not j then return false, "page_not_found" end
     local scroll = self:GetScroll(m, j)
     if not scroll then return false, "page_not_ready" end
