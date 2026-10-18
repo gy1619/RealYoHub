@@ -1,7 +1,7 @@
--- RealYoUI.lua
--- RealYoUI Standalone UI Library + GameBridge Takeover Protocol V3.7
+-- RealYoUI.lua (Astool.lua)
+-- RealYoUI Standalone UI Library + GameBridge Takeover Protocol V4.0
 local Lib = {
-    Version = "3.7.0",
+    Version = "4.0.0",
     Brand = "RealYoUI",
     BridgeProtocol = 2,
     IsRealYoUI = true,
@@ -50,34 +50,62 @@ local COL = {
 }
 Lib.COL = COL
 
-local currentLang = "zh"
-local TranslationCache = {}
-
-local function TranslateText(text)
-    if not text or text == "" then return "" end
-    if currentLang == "zh" then return text end
-    if TranslationCache[text] then return TranslationCache[text] end
-    
-    local ok, result = pcall(function()
-        local url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=en&dt=t&q=" .. HttpService:UrlEncode(text)
-        local response = HttpService:GetAsync(url)
-        local data = HttpService:JSONDecode(response)
-        if data and data[1] and data[1][1] and data[1][1][1] then
-            return data[1][1][1]
-        end
-        return nil
-    end)
-    
-    if ok and result and result ~= "" then
-        TranslationCache[text] = result
-        return result
-    end
-    return text
-end
+local currentLang = "en"
+local I18N = {
+    ["首頁設置"]="Home",["繪制面板"]="ESP",["通用功能"]="Misc",["腳本中心"]="Scripts",
+    ["公告相關"]="Info",["其他相關"]="Other",["配置相關"]="Configs",["界面相關"]="Appearance",
+    ["透視相關"]="Chams",["方框相關"]="Boxes",["骨骼相關"]="Skeleton",["距離相關"]="Tags",
+    ["移動相關"]="Movement",["角色相關"]="Player",["世界相關"]="World",["實用相關"]="Utility",
+    ["自家腳本"]="Our Scripts",["免卡腳本"]="Free Hubs",["需卡密腳本"]="Key Hubs",["通用管理員"]="Admin",
+    ["當前狀態: 當前開放 (無需卡密)"]="Status: Open (No Key)",
+    ["前往DC群組"]="Join Discord",["設備碼:"]="HWID:",["複製"]="Copy",["HWID已複製"]="HWID copied",
+    ["當前注入器不支持剪貼板"]="Executor lacks clipboard",
+    ["剩餘時間: 暫時免費  無須獲取密鑰"]="Time Left: Free (No Key)",
+    ["SZE內部"]="SZE Internal",
+    ["歡迎使用 如果你是買來的 那麼你吃上了 脚本未公開"]="Welcome! If you paid, you got scammed - not public",
+    ["繪制刷新幀率"]="Render FPS",["刷新率"]="FPS",["防禁令"]="Anti-BAN",
+    ["水印"]="Watermark",["測試1"]="Test 1",["測試2"]="Test 2",["測試3"]="Test 3",["測試4"]="Test 4",
+    ["節能模式"]="Low Power",["繪制樣式"]="ESP Theme",
+    ["暗淡淺灰"]="Dull Gray",["霓虹彩虹"]="Neon Rainbow",["經典白色"]="Classic White",
+    ["測試"]="Test",["測試按鈕"]="Test Button",["殼功能, 未配置"]="Shell feature, not configured",
+    ["語言設置"]="Language",["Chinese Mode"]="Chinese Mode",
+    ["配置管理"]="Config Manager",["輸入配置名稱"]="Config name",["配置選擇"]="Config",
+    ["暫無配置"]="(none)",["保存配置"]="Save",["讀取配置"]="Load",["刪除配置"]="Delete",
+    ["刷新列表"]="Refresh",["配置列表已刷新"]="Config list refreshed",
+    ["自動加載配置"]="Auto-Load",["請先輸入配置名稱"]="Enter a config name first",
+    ["配置存於注入器目錄 RealYo_Configs"]="Configs saved in RealYo_Configs",
+    ["主題與邊框"]="Theme & Border",["罐頭主題"]="Presets",["邊框樣式"]="Border Style",["字體樣式"]="Font",
+    ["自定義調色 (畫板)"]="Custom Colors (Picker)",["調色目標"]="Color Target",
+    ["經典"]="Classic",["深藍"]="Deep Blue",["賽博"]="Cyber",["吸血"]="Vampire",
+    ["彩虹"]="Rainbow",["單色"]="Solid",
+    ["UI底"]="UI BG",["組件"]="Components",["主文字"]="Main Text",["暗文字"]="Dim Text",["強調色"]="Accent",["邊框"]="Border",
+    ["色相"]="Hue",["飽和"]="Sat",["明度"]="Val",["目標: "]="Target: ",
+    ["目標: UI底 (拖動畫板套用)"]="Target: UI BG (drag picker)",
+    ["ESP 透視控制 (所見即所得)"]="ESP (WYSIWYG)",["啟動透視"]="Enable ESP",["顯示名字"]="Names",
+    ["最大距離"]="Max Distance",["透明度"]="Fill Alpha",["進階配置"]="Advanced",
+    ["方框/線條粗細"]="Thickness",["名字字體大小"]="Font Size",["自定義RGB"]="Custom RGB",
+    ["開啟彩虹"]="Rainbow Mode",["速度"]="Speed",["已設置為彩虹"]="Rainbow set",
+    ["开源通用功能"]="Open-source Utilities",
+    ["飛行"]="Fly",["穿牆"]="Noclip",["無限跳"]="Inf Jump",["移速"]="Speed",["跳躍力度"]="Jump Power",
+    ["飛行速度"]="Fly Speed",["移動速度"]="Walk Speed",
+    ["防掛機踢出"]="Anti-AFK",["重置角色"]="Reset Character",
+    ["全亮"]="Fullbright",["去霧"]="No Fog",["鎖定時間"]="Lock Time",["鎖定時間點"]="Time of Day",
+    ["複製當前坐標"]="Copy Position",["坐標已複製"]="Position copied",["重加入服務器"]="Rejoin",
+    ["管理员命令脚本"]="Admin script",["角色未就緒"]="Character not ready",
+    ["电脑端Survive in area 51!"]="PC: Survive in Area 51",["手机端Survive in area 51!"]="Mobile: Survive in Area 51",
+    ["已执行"]="Executed",["未知错误"]="Error",
+    ["自家脚本 RealYoHub"]="Our Scripts - RealYoHub",["尚未完善"]="WIP",
+    ["加載 Infinite Yield"]="Load Infinite Yield",
+    ["Infinite Yield 已啟動"]="Infinite Yield loaded",
+    ["加載失敗 (網絡/執行器限制)"]="Load failed (network/executor)",
+    ["UI透明度"]="UI Alpha",
+}
+Lib.I18N = I18N
 
 local function T(s)
     if s == nil then return "" end
-    return TranslateText(s)
+    if currentLang == "en" then return I18N[s] or s end
+    return s
 end
 Lib.T = T
 
@@ -96,12 +124,8 @@ local function ApplyLanguage()
         local o = e.obj
         if o and o.Parent then
             if e.custom then e.custom()
-            elseif currentLang == "zh" then
-                if e.ph then o.PlaceholderText = e.zh else o.Text = e.zh end
-            else
-                local trans = TranslationCache[e.zh] or e.zh
-                if e.ph then o.PlaceholderText = trans else o.Text = trans end
-            end
+            elseif e.ph then o.PlaceholderText = T(e.zh)
+            else o.Text = T(e.zh) end
         end
     end
 end
@@ -338,7 +362,6 @@ local flowByScroll = {}
 local function FlowOf(scroll)
     local flow = flowByScroll[scroll]
     if flow and flow._container and flow._container.Parent == scroll then return flow end
-    
     local container = Create("Frame", { Size = UDim2.new(1, -S(8), 0, 0), BackgroundTransparency = 1, Parent = scroll })
     local slots = {}
     local padX, padY = S(12), S(10)
@@ -861,22 +884,8 @@ Lib.LoadAvatar = LoadAvatar
 local SetUIVisible
 local function SetLanguage(lang)
     currentLang = lang
-    if lang == "en" then
-        task.spawn(function()
-            Toast("Translating...")
-            for _, e in ipairs(langRegistry) do
-                if e.zh and e.obj and e.obj.Parent then
-                    local trans = TranslateText(e.zh)
-                    if e.ph then e.obj.PlaceholderText = trans else e.obj.Text = trans end
-                    task.wait(0.02)
-                end
-            end
-            Toast("Translation Complete!")
-        end)
-    else
-        ApplyLanguage()
-        Toast("語言: 中文")
-    end
+    ApplyLanguage()
+    Toast(lang == "en" and "Language: English" or "語言: 中文")
 end
 Lib.SetLanguage = SetLanguage
 
