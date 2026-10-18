@@ -1,5 +1,5 @@
 -- area51.lua | RealYoHub (PremiumUI GameBridge auto-handshake)
--- 第一行必须是本注释块：用于确认 GitHub 上是 handshake 版
+-- 第一行必须是本注释：用于确认 GitHub 上是 handshake 版
 local GAME = { Name = "RealYoHub Area51", Brand = "PremiumUI" }
 
 local Players = game:GetService("Players")
@@ -11,6 +11,17 @@ local Workspace = game:GetService("Workspace")
 _G.savedPosition = _G.savedPosition or nil
 
 local Runtime = { Mode = "Original", Bridge = nil, Host = nil }
+
+-------------------------------------------------
+-- 工具：阶段保护（错误打印到 console，不再被宿主按钮吞掉）
+-------------------------------------------------
+local function SafeCall(tag, fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok then
+        warn(("[RealYoHub][ERR] %s : %s"):format(tag, tostring(err)))
+    end
+    return ok
+end
 
 -------------------------------------------------
 -- 1) 宿主检测（5秒重试 + 自诊断）
@@ -28,7 +39,7 @@ local function FindHostUI(timeout)
         end },
     }
     local deadline = tick() + timeout
-    local why = "三个注册表全空：宿主未发布（末尾 Publish 块没加/宿主没跑完）"
+    local why = "三个注册表全空：宿主未发布（末尾 Bridge 追加块没加/宿主没跑完）"
     while true do
         for _, src in ipairs(sources) do
             local ok, obj = pcall(src.get)
@@ -83,19 +94,19 @@ end
 -- 2) 接管映射改名（核心同tab聚合 / 通用进空白tab / 替换即改名）
 -------------------------------------------------
 if Runtime.Mode == "Host" then
-    HostUI:RenameMain(4, "RealYoHub")
-    HostUI:RenameSub(4, 1, "Area 51")
-    HostUI:RenameSub(4, 2, "Gun Modded")
-    HostUI:RenameSub(4, 3, "Teleport")
-    HostUI:RenameMain(2, "Universal Tools")
-    HostUI:RenameSub(2, 2, "FE Tools")
+    SafeCall("RenameMain4", function() HostUI:RenameMain(4, "RealYoHub") end)
+    SafeCall("RenameSub41", function() HostUI:RenameSub(4, 1, "Area 51") end)
+    SafeCall("RenameSub42", function() HostUI:RenameSub(4, 2, "Gun Modded") end)
+    SafeCall("RenameSub43", function() HostUI:RenameSub(4, 3, "Teleport") end)
+    SafeCall("RenameMain2", function() HostUI:RenameMain(2, "Universal Tools") end)
+    SafeCall("RenameSub22", function() HostUI:RenameSub(2, 2, "FE Tools") end)
 end
 
 -------------------------------------------------
 -- 3) 通知适配
 -------------------------------------------------
 local function Notify(title, content, duration, icon)
-    if Runtime.Mode == "Host" then
+    if Runtime.Mode == "Host" and Runtime.Host and type(Runtime.Host.Toast) == "function" then
         pcall(function() Runtime.Host:Toast("[" .. title .. "] " .. tostring(content or "")) end)
     else
         pcall(function() Notifier.new({ Title = title, Content = content, Duration = duration or 5, Icon = icon or "info" }) end)
@@ -103,7 +114,7 @@ local function Notify(title, content, duration, icon)
 end
 
 -------------------------------------------------
--- 4) 适配器
+-- 4) 适配器（功能代码只写一遍）
 -------------------------------------------------
 local function BridgeAdapter(bridge)
     local A = { _b = bridge }
@@ -136,7 +147,7 @@ local function WindAdapter(tab)
 end
 
 -------------------------------------------------
--- 5) 功能模块（逻辑 1:1 保留）
+-- 5) 功能模块（逻辑 1:1 保留自原 area51）
 -------------------------------------------------
 local function BuildArea51(A)
     local speedHackConnection = nil
@@ -569,14 +580,34 @@ end
 -------------------------------------------------
 if Runtime.Mode == "Host" then
     local bridge = Runtime.Bridge
-    bridge:UsePageIndex(4, 1, "Replace") BuildArea51(BridgeAdapter(bridge))
-    bridge:UsePageIndex(4, 2, "Replace") BuildGunModded(BridgeAdapter(bridge))
-    bridge:UsePageIndex(4, 3, "Replace") BuildTeleport(BridgeAdapter(bridge))
-    bridge:UsePageIndex(2, 2, "Replace") BuildFETools(BridgeAdapter(bridge))
-    bridge:Focus()
+
+    SafeCall("Build Area51", function()
+        bridge:UsePageIndex(4, 1, "Replace")
+        BuildArea51(BridgeAdapter(bridge))
+    end)
+    SafeCall("Build GunModded", function()
+        bridge:UsePageIndex(4, 2, "Replace")
+        BuildGunModded(BridgeAdapter(bridge))
+    end)
+    SafeCall("Build Teleport", function()
+        bridge:UsePageIndex(4, 3, "Replace")
+        BuildTeleport(BridgeAdapter(bridge))
+    end)
+    SafeCall("Build FETools", function()
+        bridge:UsePageIndex(2, 2, "Replace")
+        BuildFETools(BridgeAdapter(bridge))
+    end)
+    SafeCall("Focus", function() bridge:Focus() end)
+
     Notify("RealYoHub", "Handshake OK - hosted by PremiumUI", 6, "crown")
 else
-    local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+    local okWind, WindUI = pcall(function()
+        return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+    end)
+    if not okWind or type(WindUI) ~= "table" then
+        warn("[RealYoHub][ERR] WindUI load failed: " .. tostring(WindUI))
+        return
+    end
 
     local createUI
     local function LoadScript() createUI() end
@@ -616,15 +647,15 @@ else
             Draggable = true,
         })
 
-        local Area51Tab = Window:Tab({ Title = "Area 51", Icon = "globe" })
+        local Area51Tab      = Window:Tab({ Title = "Area 51", Icon = "globe" })
         local Area51GunTPTab = Window:Tab({ Title = "Gun Modded", Icon = "crosshair" })
-        local Area51TPTab = Window:Tab({ Title = "Teleport", Icon = "map-pin" })
-        local FETab = Window:Tab({ Title = "FE Tools", Icon = "zap" })
+        local Area51TPTab    = Window:Tab({ Title = "Teleport", Icon = "map-pin" })
+        local FETab          = Window:Tab({ Title = "FE Tools", Icon = "zap" })
 
-        BuildArea51(WindAdapter(Area51Tab))
-        BuildGunModded(WindAdapter(Area51GunTPTab))
-        BuildTeleport(WindAdapter(Area51TPTab))
-        BuildFETools(WindAdapter(FETab))
+        SafeCall("Wind Build Area51",   function() BuildArea51(WindAdapter(Area51Tab)) end)
+        SafeCall("Wind Build GunModded",function() BuildGunModded(WindAdapter(Area51GunTPTab)) end)
+        SafeCall("Wind Build Teleport", function() BuildTeleport(WindAdapter(Area51TPTab)) end)
+        SafeCall("Wind Build FETools",  function() BuildFETools(WindAdapter(FETab)) end)
 
         Notify("RealYoHub V1.2.4", "Loaded successfully!\nRightControl = Toggle Menu", 8, "crown")
         Window:AutoSaveConfig(true)
