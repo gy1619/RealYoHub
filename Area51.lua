@@ -503,7 +503,7 @@ else
     createUI = function()
         local Window = WindUI:CreateWindow({
             Title = "RealYoHub V1.2.4", Icon = "palette",
-            Author = "Welcome " .. LocalPlayer.Name .. "\nMade by KevinSze",
+            Author = "Welcome " .. LocalPlayer.Name .. "\nMade by SZELON0",
             Folder = "RealYo", Size = UDim2.fromOffset(550, 380), Theme = "Light",
             User = { Enabled = true, Anonymous = true }, SideBarWidth = 200, HideSearchBar = false,
         })
@@ -525,4 +525,3 @@ else
         Window:AutoSaveConfig(true)
     end
 end
-print(("[RealYoHub] script finished: Mode=%s"):format(Runtime.Mode))
