@@ -12,9 +12,7 @@ _G.savedPosition = _G.savedPosition or nil
 
 local Runtime = { Mode = "Original", Bridge = nil, Host = nil }
 
--------------------------------------------------
 -- 工具：阶段保护（错误打印到 console，不再被宿主按钮吞掉）
--------------------------------------------------
 local function SafeCall(tag, fn, ...)
     local ok, err = pcall(fn, ...)
     if not ok then
@@ -23,9 +21,7 @@ local function SafeCall(tag, fn, ...)
     return ok
 end
 
--------------------------------------------------
 -- 1) 宿主检测（5秒重试 + 自诊断）
--------------------------------------------------
 local AUTO_ACCEPT = true -- future: 改成询问框结果
 
 local function FindHostUI(timeout)
@@ -77,8 +73,8 @@ if AUTO_ACCEPT and HostUI then
             Brand = GAME.Brand,
             Protocol = HostUI.BridgeProtocol or 2,
             Name = GAME.Name,
-            Category = "腳本中心",   -- 删掉空格
-            Sub = "自家腳本",       -- 删掉空格
+            Category = "腳本中心",
+            Sub = "自家腳本",
             Mode = "Replace",
             Focus = false,
         })
@@ -93,9 +89,7 @@ if AUTO_ACCEPT and HostUI then
     end
 end
 
--------------------------------------------------
 -- 2) 接管映射改名（核心同tab聚合 / 通用进空白tab / 替换即改名）
--------------------------------------------------
 if Runtime.Mode == "Host" then
     SafeCall("RenameMain4", function() HostUI:RenameMain(4, "RealYoHub") end)
     SafeCall("RenameSub41", function() HostUI:RenameSub(4, 1, "Area 51") end)
@@ -105,9 +99,7 @@ if Runtime.Mode == "Host" then
     SafeCall("RenameSub22", function() HostUI:RenameSub(2, 2, "FE Tools") end)
 end
 
--------------------------------------------------
 -- 3) 通知适配
--------------------------------------------------
 local function Notify(title, content, duration, icon)
     if Runtime.Mode == "Host" and Runtime.Host and type(Runtime.Host.Toast) == "function" then
         pcall(function() Runtime.Host:Toast("[" .. title .. "] " .. tostring(content or "")) end)
@@ -116,9 +108,7 @@ local function Notify(title, content, duration, icon)
     end
 end
 
--------------------------------------------------
 -- 4) 适配器（功能代码只写一遍）
--------------------------------------------------
 local function BridgeAdapter(bridge)
     local A = { _b = bridge }
     function A:Section(t) return self._b:Section(t) end
@@ -149,9 +139,7 @@ local function WindAdapter(tab)
     return A
 end
 
--------------------------------------------------
 -- 5) 功能模块（逻辑 1:1 保留自原 area51）
--------------------------------------------------
 local function BuildArea51(A)
     local speedHackConnection = nil
     local farmConn = nil
@@ -578,9 +566,7 @@ local function BuildFETools(A)
     end)
 end
 
--------------------------------------------------
 -- 6) 分发：宿主接管 / WindUI 回退
--------------------------------------------------
 if Runtime.Mode == "Host" then
     local bridge = Runtime.Bridge
 
@@ -616,12 +602,12 @@ else
     local function LoadScript() createUI() end
 
     WindUI:Popup({
-        Title = "RealYoHub V1.2.4 ",
+        Title = "RealYoHub V1.2.4",
         IconThemed = true,
-        Content = "Welcome  " .. LocalPlayer.Name .. "\nArea 51 All ready ",
+        Content = "Welcome " .. LocalPlayer.Name .. "\nArea 51 All ready",
         Buttons = {
-            { Title = "Leave ", Variant = "Secondary ", Callback = function() end },
-            { Title = "Execute ", Icon = "zap ", Variant = "Primary ", Callback = function() LoadScript() end },
+            { Title = "Leave", Variant = "Secondary", Callback = function() end },
+            { Title = "Execute", Icon = "zap", Variant = "Primary", Callback = function() LoadScript() end },
         },
     })
 
@@ -650,18 +636,19 @@ else
             Draggable = true,
         })
 
-        local Area51Tab      = Window:Tab({ Title = "Area 51", Icon = "globe" })
+        local Area51Tab = Window:Tab({ Title = "Area 51", Icon = "globe" })
         local Area51GunTPTab = Window:Tab({ Title = "Gun Modded", Icon = "crosshair" })
-        local Area51TPTab    = Window:Tab({ Title = "Teleport", Icon = "map-pin" })
-        local FETab          = Window:Tab({ Title = "FE Tools", Icon = "zap" })
+        local Area51TPTab = Window:Tab({ Title = "Teleport", Icon = "map-pin" })
+        local FETab = Window:Tab({ Title = "FE Tools", Icon = "zap" })
 
-        SafeCall("Wind Build Area51",   function() BuildArea51(WindAdapter(Area51Tab)) end)
-        SafeCall("Wind Build GunModded",function() BuildGunModded(WindAdapter(Area51GunTPTab)) end)
+        SafeCall("Wind Build Area51", function() BuildArea51(WindAdapter(Area51Tab)) end)
+        SafeCall("Wind Build GunModded", function() BuildGunModded(WindAdapter(Area51GunTPTab)) end)
         SafeCall("Wind Build Teleport", function() BuildTeleport(WindAdapter(Area51TPTab)) end)
-        SafeCall("Wind Build FETools",  function() BuildFETools(WindAdapter(FETab)) end)
+        SafeCall("Wind Build FETools", function() BuildFETools(WindAdapter(FETab)) end)
 
         Notify("RealYoHub V1.2.4", "Loaded successfully!\nRightControl = Toggle Menu", 8, "crown")
         Window:AutoSaveConfig(true)
     end
 end
+
 print(("[RealYoHub] script finished: Mode=%s"):format(Runtime.Mode))
