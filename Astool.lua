@@ -1,10 +1,10 @@
--- RealYoUI.lua
--- RealYoUI Standalone UI Library + GameBridge Takeover Protocol V3.5 (MyMemory Translate + Flow Fix)
+-- PremiumUI.lua
+-- PremiumUI Standalone UI Library + GameBridge Takeover Protocol V3.6 (Google Translate Fix)
 local Lib = {
-    Version = "3.5.0",
-    Brand = "RealYoUI",
+    Version = "3.6.0",
+    Brand = "PremiumUI",
     BridgeProtocol = 2,
-    IsRealYoUI = true,
+    IsPremiumUI = true,
     Initialized = false,
 }
 
@@ -52,55 +52,43 @@ local COL = {
 Lib.COL = COL
 
 -- ============================================================
--- 翻译系统 (MyMemory API + 智能检测 + 缓存)
+-- 翻译系统 (Google Translate API + 异步批量 + 缓存)
 -- ============================================================
 local currentLang = "zh" -- 默认中文
 local TranslationCache = {}
+local isTranslating = false
 
--- 检测是否包含中文
-local function HasChinese(text)
-    return string.find(text, "[\228-\233][\128-\191]") ~= nil
-end
-
-local function TranslateText(text)
+-- 核心翻译函数 (同步，带缓存)
+local function GetTranslation(text)
     if not text or text == "" then return "" end
-    if currentLang == "zh" then return text end -- 中文模式直接返回
+    if TranslationCache[text] then return TranslationCache[text] end
     
-    -- 纯英文/数字/符号，不翻译，直接返回（避免 API 错误和卡顿）
-    if not HasChinese(text) then return text end
-    
-    -- 查缓存
-    if TranslationCache[text] then
-        return TranslationCache[text]
-    end
-
-    -- 请求 MyMemory API (比 Google 稳定)
+    -- 尝试调用 Google API
     local ok, result = pcall(function()
-        local encodedText = HttpService:UrlEncode(text)
-        local url = "https://api.mymemory.translated.net/get?q=" .. encodedText .. "&langpair=zh-CN|en"
+        local url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=en&dt=t&q=" .. HttpService:UrlEncode(text)
         local response = HttpService:GetAsync(url)
+        -- Google 返回格式: [[["Hello","你好",null,null,1]],null,"zh-CN"]
         local data = HttpService:JSONDecode(response)
-        if data and data.responseData and data.responseData.translatedText then
-            local trans = data.responseData.translatedText
-            -- 过滤掉 API 返回的警告标记
-            if trans:find("MYMEMORY WARNING") then return text end
-            return trans
+        if data and data[1] and data[1][1] and data[1][1][1] then
+            return data[1][1][1]
         end
         return nil
     end)
-
+    
     if ok and result and result ~= "" then
         TranslationCache[text] = result
         return result
-    else
-        -- 失败时返回原文，防止 UI 空白
-        return text
     end
+    
+    -- 失败时返回原文，防止 UI 空白
+    return text
 end
 
+-- T() 函数：中文直接返回，英文查缓存或实时翻译
 local function T(s)
     if s == nil then return "" end
-    return TranslateText(s)
+    if currentLang == "zh" then return s end
+    return GetTranslation(s)
 end
 Lib.T = T
 
@@ -153,7 +141,7 @@ local function HashStr(s)
 end
 Lib.HashStr = HashStr
 
-local DEVICE_ID = HashStr(LocalPlayer.UserId .. "_" .. GetHWID()) .. HashStr("RealYoUI_SZE" .. LocalPlayer.UserId)
+local DEVICE_ID = HashStr(LocalPlayer.UserId .. "_" .. GetHWID()) .. HashStr("PremiumUI_SZE" .. LocalPlayer.UserId)
 Lib.DEVICE_ID = DEVICE_ID
 
 local License = {
@@ -168,7 +156,7 @@ local function RegisterSetting(name, kind, get, set)
 end
 Lib.RegisterSetting = RegisterSetting
 
-local CFG_DIR = "RealYoUI_Configs"
+local CFG_DIR = "PremiumUI_Configs"
 local AUTO_FILE = CFG_DIR .. "/_autoload_.json"
 local function FileSupport() return type(writefile) == "function" and type(readfile) == "function" and type(isfile) == "function" end
 local function EnsureFolder() pcall(function() if type(makefolder) == "function" and not isfolder(CFG_DIR) then makefolder(CFG_DIR) end end) end
@@ -366,12 +354,10 @@ end
 local flowByScroll = {}
 local function FlowOf(scroll)
     local flow = flowByScroll[scroll]
-    -- 检查容器是否还有效（Parent 是否还是 scroll）
     if flow and flow._container and flow._container.Parent == scroll then
         return flow
     end
     
-    -- 重建容器
     local container = Create("Frame", { Size = UDim2.new(1, -S(8), 0, 0), BackgroundTransparency = 1, Parent = scroll })
     local slots = {}
     local padX, padY = S(12), S(10)
@@ -425,7 +411,6 @@ local function FlowOf(scroll)
 end
 Lib.FlowOf = FlowOf
 
--- 暴露清空 Flow 缓存的方法，供 Bridge 使用
 function Lib:ClearFlowCache(scroll)
     flowByScroll[scroll] = nil
 end
@@ -898,20 +883,27 @@ local SetUIVisible
 local function SetLanguage(lang)
     currentLang = lang
     if lang == "en" then
-        -- 批量翻译注册过的文本
-        for _, e in ipairs(langRegistry) do
-            if e.zh then
-                local trans = TranslateText(e.zh)
-                if e.obj and e.obj.Parent then
-                    if e.ph then e.obj.PlaceholderText = trans
-                    else e.obj.Text = trans end
+        -- 异步批量翻译，防止卡死和限流
+        if not isTranslating then
+            isTranslating = true
+            Toast("Translating... (Please wait)")
+            task.spawn(function()
+                for _, e in ipairs(langRegistry) do
+                    if e.zh and e.obj and e.obj.Parent then
+                        local trans = GetTranslation(e.zh)
+                        if e.ph then e.obj.PlaceholderText = trans else e.obj.Text = trans end
+                        task.wait(0.02) -- 节流
+                    end
                 end
-            end
+                isTranslating = false
+                Toast("Translation Complete!")
+            end)
         end
     else
-        ApplyLanguage() -- 恢复中文原文
+        -- 切回中文，直接恢复原文
+        ApplyLanguage()
+        Toast("語言: 中文")
     end
-    Toast(lang == "en" and "Language: English" or "語言: 中文")
 end
 Lib.SetLanguage = SetLanguage
 
@@ -920,7 +912,7 @@ function Lib:Initialize(opts)
     opts = opts or {}
 
     ScreenGui = Create("ScreenGui", {
-        Name = "RealYoUI_SZE" .. math.random(10000, 99999), ResetOnSpawn = false,
+        Name = "PremiumUI_SZE" .. math.random(10000, 99999), ResetOnSpawn = false,
         IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     })
     ScreenGui.Parent = (okCore and CoreGuiService) or LocalPlayer:WaitForChild("PlayerGui")
@@ -1106,11 +1098,9 @@ function BridgeMeta:UsePageIndex(m, j, mode)
     local scroll = self.UI.GetScroll(m, j)
     if not scroll then return false, "page_not_ready" end
     if mode ~= "Append" then
-        -- 清空页面
         for _, c in ipairs(scroll:GetChildren()) do
             if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
         end
-        -- ★ 关键修复：清空后清除 Flow 缓存，强制下次重建
         self.UI:ClearFlowCache(scroll)
     end
     self.Host = scroll
@@ -1232,11 +1222,11 @@ end
 -- Host Publish (秒刷发布)
 -------------------------------------------------
 local function PublishHost()
-    pcall(function() shared.RealYoUI = Lib end)
-    pcall(function() _G.RealYoUI = Lib end)
-    pcall(function() if getgenv then getgenv().RealYoUI = Lib end end)
+    pcall(function() shared.PremiumUI = Lib end)
+    pcall(function() _G.PremiumUI = Lib end)
+    pcall(function() if getgenv then getgenv().PremiumUI = Lib end end)
 end
 PublishHost()
-print(">>> [RealYoUI] Host published: shared/_G/getgenv RealYoUI ready, BridgeProtocol=2")
+print(">>> [PremiumUI] Host published: shared/_G/getgenv PremiumUI ready, BridgeProtocol=2")
 
 return Lib
