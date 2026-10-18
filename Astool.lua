@@ -1,5 +1,5 @@
 -- RealYoUI.lua (Astool.lua)
--- RealYoUI Standalone UI Library + GameBridge Takeover Protocol V4.3 (Auto-Translate, No I18N Dict)
+-- RealYoUI Standalone UI Library + GameBridge Takeover Protocol V4.3 (No Translation)
 local Lib = {
 Version = "4.3.0",
 Brand = "RealYoUI",
@@ -45,78 +45,6 @@ PillGray = Color3.fromRGB(75, 75, 75), White = Color3.fromRGB(255, 255, 255),
 }
 Lib.COL = COL
 
--- ================= 核心：全自动翻译系统 (无字典，本地缓存) =================
-local TransCache = {}
-local TransFile = "RealYo_Translations.json"
-
--- 兼容各大注入器的 request 函数
-local request = request or http_request or (syn and syn.request) or (fluxus and fluxus.request)
-
-pcall(function()
-    if type(isfile) == "function" and type(readfile) == "function" and isfile(TransFile) then
-        TransCache = HttpService:JSONDecode(readfile(TransFile))
-    end
-end)
-
-local function SaveTransCache()
-    pcall(function()
-        if type(writefile) == "function" then
-            writefile(TransFile, HttpService:JSONEncode(TransCache))
-        end
-    end)
-end
-
--- 判断是否包含中文
-local function HasChinese(str)
-    return string.find(str, "[\228-\233][\128-\191]") ~= nil
-end
-
-local function TranslateText(text, callback)
-    if not text or not HasChinese(text) then
-        if callback then callback(text) end
-        return text
-    end
-    if TransCache[text] then
-        if callback then callback(TransCache[text]) end
-        return TransCache[text]
-    end
-    
-    -- 异步翻译
-    task.spawn(function()
-        local url = "https://api.mymemory.translated.net/get?q=" .. HttpService:UrlEncode(text) .. "&langpair=zh-CN|en"
-        local ok, res = pcall(function()
-            if request then
-                return request({Url = url, Method = "GET"})
-            elseif HttpService then
-                return {Body = HttpService:GetAsync(url)}
-            end
-        end)
-        if ok and res and (res.StatusCode == 200 or not res.StatusCode) then
-            local ok2, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
-            if ok2 and data.responseData and data.responseData.translatedText then
-                local translated = data.responseData.translatedText
-                if translated ~= text then
-                    TransCache[text] = translated
-                    SaveTransCache()
-                    if callback then callback(translated) end
-                end
-            end
-        end
-    end)
-    return text -- 先返回中文，防止阻塞 UI
-end
-
-local function T(s)
-    return TranslateText(s)
-end
-Lib.T = T
-
-local function RegisterLang(...) end
-Lib.RegisterLang = RegisterLang
-local function SetLanguage(...) end
-Lib.SetLanguage = SetLanguage
--- ========================================================================
-
 local function GetHWID()
 local cands = { "gethwid", "get_hwid", "GetHwid", "gethardwareid", "get_sha1" }
 for _, fn in ipairs(cands) do
@@ -139,7 +67,7 @@ Lib.DEVICE_ID = DEVICE_ID
 
 local License = {
 Mode = "open", Status = "當前開放 (無需卡密)",
-Remain = "暫時免費  無須獲取密鑰", BoundDevice = DEVICE_ID,
+Remain = "暫時免費  無須獲取密", BoundDevice = DEVICE_ID,
 }
 Lib.License = License
 
@@ -171,19 +99,17 @@ local ScreenGui = nil
 local ToastHolder = nil
 local function Toast(msg)
 if not ToastHolder then print("[Toast]", msg) return end
-TranslateText(msg, function(translated)
-    local label = Create("TextLabel", {
-        Size = UDim2.fromOffset(S(280), S(30)), BackgroundColor3 = Color3.fromRGB(20, 20, 20),
-        Text = translated, TextColor3 = COL.White, TextSize = TS(13), Font = Enum.Font.GothamMedium,
-        BackgroundTransparency = 1, TextTransparency = 1, Parent = ToastHolder,
-    })
-    AddCorner(label, S(6))
-    TweenService:Create(label, TweenInfo.new(0.2), { BackgroundTransparency = 0.25, TextTransparency = 0 }):Play()
-    taskWait(1.8)
-    TweenService:Create(label, TweenInfo.new(0.3), { BackgroundTransparency = 1, TextTransparency = 1 }):Play()
-    taskWait(0.35)
-    label:Destroy()
-end)
+local label = Create("TextLabel", {
+    Size = UDim2.fromOffset(S(280), S(30)), BackgroundColor3 = Color3.fromRGB(20, 20, 20),
+    Text = msg, TextColor3 = COL.White, TextSize = TS(13), Font = Enum.Font.GothamMedium,
+    BackgroundTransparency = 1, TextTransparency = 1, Parent = ToastHolder,
+})
+AddCorner(label, S(6))
+TweenService:Create(label, TweenInfo.new(0.2), { BackgroundTransparency = 0.25, TextTransparency = 0 }):Play()
+taskWait(1.8)
+TweenService:Create(label, TweenInfo.new(0.3), { BackgroundTransparency = 1, TextTransparency = 1 }):Play()
+taskWait(0.35)
+label:Destroy()
 end
 Lib.Toast = Toast
 
@@ -415,7 +341,6 @@ Text = text, TextColor3 = color, TextSize = size or TS(13),
 Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left,
 TextWrapped = true, Parent = slot,
 })
-TranslateText(text, function(translated) l.Text = translated end)
 return l
 end
 
@@ -434,7 +359,6 @@ Size = UDim2.new(1, 0, 0, S(18)), Position = UDim2.fromOffset(0, S(8)), Backgrou
 Text = text, TextColor3 = COL.TextDark, TextSize = TS(12), Font = Enum.Font.GothamMedium,
 TextXAlignment = Enum.TextXAlignment.Left, Parent = slot,
 })
-TranslateText(text, function(translated) l.Text = translated end)
 return l
 end
 
@@ -445,7 +369,6 @@ Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255), 
 Text = text, TextColor3 = COL.TextDark, Font = Enum.Font.GothamMedium,
 TextSize = TS(12), AutoButtonColor = false, Parent = host,
 })
-TranslateText(text, function(translated) btn.Text = translated end)
 AddCorner(btn, S(5))
 Create("UIStroke", { Thickness = 1, Color = Color3.fromRGB(160, 160, 160), Transparency = 0.4 }, btn)
 SafeClick(btn, function() if cb then cb() end end)
@@ -459,7 +382,6 @@ Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = COL.White, BackgroundTransparen
 Text = default or "", PlaceholderText = placeholder, TextColor3 = COL.TextDark,
 Font = Enum.Font.GothamMedium, TextSize = TS(13), ClearTextOnFocus = false, Parent = host,
 })
-TranslateText(placeholder, function(translated) box.PlaceholderText = translated end)
 AddCorner(box, S(5))
 Create("UIStroke", { Thickness = 1, Color = Color3.fromRGB(160, 160, 160), Transparency = 0.4 }, box)
 return box
@@ -480,7 +402,6 @@ Size = UDim2.new(1, -S(26), 1, 0), Position = UDim2.fromOffset(S(26), 0), Backgr
 Text = text, TextColor3 = COL.TextDark, TextSize = TS(13), Font = Enum.Font.Gotham,
 TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = row,
 })
-TranslateText(text, function(translated) label.Text = translated end)
 local function apply(v, fire)
 v = v and true or false
 if v == state then return end
@@ -500,7 +421,6 @@ Size = UDim2.fromOffset(S(92), S(16)), Position = UDim2.new(0, 0, 0.5, -S(8)), B
 Text = text, TextColor3 = COL.TextDim, TextSize = TS(11), Font = Enum.Font.Gotham,
 TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = row,
 })
-TranslateText(text, function(translated) desc.Text = translated end)
 local track = Create("Frame", {
 Size = UDim2.fromOffset(S(120), S(8)), Position = UDim2.new(0, S(96), 0.5, -S(4)),
 BackgroundColor3 = Color3.fromRGB(120, 120, 120), BackgroundTransparency = 0.3, Parent = row,
@@ -570,7 +490,6 @@ Size = UDim2.fromOffset(S(150), S(26)), BackgroundColor3 = Color3.fromRGB(255, 2
 Text = default .. " v", TextColor3 = COL.TextDark, TextSize = TS(12),
 Font = Enum.Font.GothamMedium, AutoButtonColor = false, Parent = row,
 })
-TranslateText(default, function(translated) btn.Text = translated .. " v" end)
 AddCorner(btn, S(5))
 Create("UIStroke", { Thickness = 1, Color = Color3.fromRGB(160, 160, 160), Transparency = 0.4 }, btn)
 local desc = Create("TextLabel", {
@@ -578,7 +497,6 @@ Size = UDim2.new(1, -S(154), 1, 0), Position = UDim2.fromOffset(S(154), 0), Back
 Text = text, TextColor3 = COL.TextDim, TextSize = TS(12), Font = Enum.Font.Gotham,
 TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = row,
 })
-TranslateText(text, function(translated) desc.Text = translated end)
 local list = Create("Frame", {
 BackgroundColor3 = Color3.fromRGB(40, 40, 40), BackgroundTransparency = 0.1,
 Visible = false, Parent = ScreenGui, ZIndex = 70,
@@ -595,10 +513,9 @@ Size = UDim2.new(1, 0, 0, S(24)), BackgroundTransparency = 1,
 Text = opt, TextColor3 = COL.White, TextSize = TS(12),
 Font = Enum.Font.Gotham, AutoButtonColor = false, Parent = list,
 })
-TranslateText(opt, function(translated) ob.Text = translated end)
 SafeClick(ob, function()
 cur = opt; 
-TranslateText(opt, function(translated) btn.Text = translated .. " v" end)
+btn.Text = opt .. " v"
 CloseDropdown()
 if cb then cb(opt) end
 end)
@@ -682,7 +599,7 @@ if not t then return end
 for k, v in pairs(t) do AP[k] = v end
 COL.PillGray = AP.Panel; COL.TextDark = AP.Text; COL.TextDim = AP.Dim; COL.Red = AP.Accent
 QueueApply()
-TranslateText("主題: " .. name, function(translated) Toast(translated) end)
+Toast("主題: " .. name)
 end
 
 local function SetTargetColor(target, col)
@@ -703,7 +620,7 @@ for _, d in ipairs(ScreenGui:GetDescendants()) do
 if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then d.Font = f end
 end
 end
-TranslateText("字體: " .. fontName, function(translated) Toast(translated) end)
+Toast("字體: " .. fontName)
 end
 
 local pickerTarget = "UI底"
@@ -728,7 +645,6 @@ Size = UDim2.fromOffset(S(44), S(16)), Position = UDim2.fromOffset(S(8), yPos + 
 Text = title, TextColor3 = Color3.new(1, 1, 1), TextSize = TS(11), Font = Enum.Font.GothamMedium,
 TextXAlignment = Enum.TextXAlignment.Left, Parent = holder,
 })
-TranslateText(title, function(translated) lab.Text = translated end)
 local track = Create("Frame", {
 Size = UDim2.new(1, -S(100), 0, S(16)), Position = UDim2.fromOffset(S(56), yPos),
 BackgroundColor3 = Color3.new(1, 1, 1), Parent = holder,
@@ -759,9 +675,7 @@ local function fire()
 local col = Color3.fromHSV(h, s, v)
 SetTargetColor(pickerTarget, col)
 if pickerInfoLabel then
-TranslateText("目標: " .. pickerTarget .. " RGB(%d,%d,%d)", function(translated)
-    pickerInfoLabel.Text = translated:format(math.floor(col.R * 255), math.floor(col.G * 255), math.floor(col.B * 255))
-end)
+    pickerInfoLabel.Text = ("目標: " .. pickerTarget .. " RGB(%d,%d,%d)"):format(math.floor(col.R * 255), math.floor(col.G * 255), math.floor(col.B * 255))
 end
 end
 local function bindBar(bar, id)
@@ -797,7 +711,6 @@ Size = UDim2.fromOffset(S(64), S(16)), Position = UDim2.fromOffset(0, 0.5, -S(8)
 Text = "UI透明度", TextColor3 = COL.TextDim, TextSize = TS(11), Font = Enum.Font.Gotham,
 TextXAlignment = Enum.TextXAlignment.Left, Parent = row,
 })
-TranslateText("UI透明度", function(translated) lab.Text = translated end)
 local track = Create("Frame", {
 Size = UDim2.fromOffset(S(136), S(8)), Position = UDim2.fromOffset(S(68), 0.5, -S(4)),
 BackgroundColor3 = Color3.fromRGB(120, 120, 120), BackgroundTransparency = 0.3, Parent = row,
@@ -950,7 +863,6 @@ local function RefreshTopNames(m)
     for j, b in ipairs(topButtons) do 
         local name = subNameSets[m][j]
         b.Text = name
-        TranslateText(name, function(translated) b.Text = translated end)
     end 
 end
 local function SelectMain(i)
@@ -978,12 +890,10 @@ self._selectSub = SelectSub
 
 for i, name in ipairs(mainNames) do
 local b = Create("TextButton", { Size = UDim2.new(1, 0, 0, sideBtnH), BackgroundTransparency = 1, Text = name, TextColor3 = (i == 1) and COL.White or COL.TextDark, Font = Enum.Font.GothamMedium, TextSize = TS(14), AutoButtonColor = false, Parent = SideList })
-TranslateText(name, function(translated) b.Text = translated end)
 sideButtons[i] = b; SafeClick(b, function() SelectMain(i) end)
 end
 for j, name in ipairs(subNameSets[1]) do
 local b = Create("TextButton", { Size = UDim2.new(0.25, 0, 1, 0), BackgroundTransparency = 1, Text = name, TextColor3 = (j == 1) and COL.White or COL.TextDark, Font = Enum.Font.GothamBold, TextSize = TS(13), AutoButtonColor = false, Parent = TopList })
-TranslateText(name, function(translated) b.Text = translated end)
 topButtons[j] = b; SafeClick(b, function() SelectSub(j) end)
 end
 
@@ -1120,7 +1030,6 @@ function BridgeMeta:TextBox(placeholder, default, opts) opts = opts or {}; retur
 function Lib:RenameMain(i, newName)
 if Lib._sideButtons and Lib._sideButtons[i] then
 Lib._sideButtons[i].Text = newName
-TranslateText(newName, function(translated) Lib._sideButtons[i].Text = translated end)
 return true
 end
 return false
