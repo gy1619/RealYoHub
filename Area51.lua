@@ -1,29 +1,20 @@
 -- area51.lua | RealYoHub (RealYoUI GameBridge auto-handshake)
--- 第一行必须是本注释：用于确认 GitHub 上是 handshake 版
 local GAME = { Name = "RealYoHub Area51", Brand = "RealYoUI" }
-
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
-
 _G.savedPosition = _G.savedPosition or nil
-
 local Runtime = { Mode = "Original", Bridge = nil, Host = nil }
 
--- 工具：阶段保护（错误打印到 console，不再被宿主按钮吞掉）
 local function SafeCall(tag, fn, ...)
     local ok, err = pcall(fn, ...)
-    if not ok then
-        warn(("[RealYoHub][ERR] %s : %s"):format(tag, tostring(err)))
-    end
+    if not ok then warn(("[RealYoHub][ERR] %s : %s"):format(tag, tostring(err))) end
     return ok
 end
 
--- 1) 宿主检测（5秒重试 + 自诊断）
-local AUTO_ACCEPT = true -- future: 改成询问框结果
-
+local AUTO_ACCEPT = true
 local function FindHostUI(timeout)
     timeout = timeout or 5
     local sources = {
@@ -35,22 +26,16 @@ local function FindHostUI(timeout)
         end },
     }
     local deadline = tick() + timeout
-    local why = "三个注册表全空：宿主未发布（末尾 Bridge 追加块没加/宿主没跑完）"
+    local why = "三个注册表全空：宿主未发布"
     while true do
         for _, src in ipairs(sources) do
             local ok, obj = pcall(src.get)
             if ok and type(obj) == "table" then
-                if obj.IsRealYoUI ~= true then
-                    why = "命中 " .. src.name .. " 但 IsRealYoUI=false"
-                elseif obj.Brand ~= GAME.Brand then
-                    why = "命中 " .. src.name .. " 但品牌不符: " .. tostring(obj.Brand)
-                elseif type(obj.RequestGameBridge) ~= "function" or type(obj.RenameMain) ~= "function" then
-                    why = "命中 " .. src.name .. " 但缺 Bridge/Rename API（宿主是未补装的旧单体版）"
-                elseif obj.Initialized ~= true then
-                    why = "命中 " .. src.name .. " 但宿主尚未初始化"
-                else
-                    return obj, src.name
-                end
+                if obj.IsRealYoUI ~= true then why = "命中 " .. src.name .. " 但 IsRealYoUI=false"
+                elseif obj.Brand ~= GAME.Brand then why = "命中 " .. src.name .. " 但品牌不符"
+                elseif type(obj.RequestGameBridge) ~= "function" or type(obj.RenameMain) ~= "function" then why = "命中 " .. src.name .. " 但缺 API"
+                elseif obj.Initialized ~= true then why = "命中 " .. src.name .. " 但宿主尚未初始化"
+                else return obj, src.name end
             end
         end
         if tick() >= deadline then break end
@@ -60,46 +45,33 @@ local function FindHostUI(timeout)
 end
 
 local HostUI, whyOrSrc = FindHostUI(5)
-
-if HostUI then
-    print(("[RealYoHub] 检测到宿主(via %s)，自动握手"):format(whyOrSrc))
-else
-    warn("[RealYoHub] 未握手，回退 WindUI。原因: " .. tostring(whyOrSrc))
-end
+if HostUI then print(("[RealYoHub] 检测到宿主(via %s)，自动握手"):format(whyOrSrc))
+else warn("[RealYoHub] 未握手，回退 WindUI。原因: " .. tostring(whyOrSrc)) end
 
 if AUTO_ACCEPT and HostUI then
     local ok, success, bridgeOrErr = pcall(function()
         return HostUI:RequestGameBridge({
-            Brand = GAME.Brand,
-            Protocol = HostUI.BridgeProtocol or 2,
-            Name = GAME.Name,
-            Category = "腳本中心",
-            Sub = "自家腳本",
-            Mode = "Replace",
-            Focus = false,
+            Brand = GAME.Brand, Protocol = HostUI.BridgeProtocol or 2, Name = GAME.Name,
+            Category = "腳本中心", Sub = "自家腳本", Mode = "Replace", Focus = false,
         })
     end)
     if ok and success == true and type(bridgeOrErr) == "table" then
-        Runtime.Mode = "Host"
-        Runtime.Bridge = bridgeOrErr
-        Runtime.Host = HostUI
+        Runtime.Mode = "Host"; Runtime.Bridge = bridgeOrErr; Runtime.Host = HostUI
         print("[RealYoHub] bridge obtained, Mode=Host")
     else
         warn("[RealYoHub][ERR] RequestGameBridge: " .. tostring(ok and bridgeOrErr or success))
     end
 end
 
--- 2) 接管映射改名（核心同tab聚合 / 通用进空白tab / 替换即改名）
 if Runtime.Mode == "Host" then
-    SafeCall("RenameMain4", function() HostUI:RenameMain(4, "Area 51") end)
-    SafeCall("RenameSub41", function() HostUI:RenameSub(4, 1, "Main") end)
+    SafeCall("RenameMain4", function() HostUI:RenameMain(4, "RealYoHub") end)
+    SafeCall("RenameSub41", function() HostUI:RenameSub(4, 1, "Area 51") end)
     SafeCall("RenameSub42", function() HostUI:RenameSub(4, 2, "Gun Modded") end)
     SafeCall("RenameSub43", function() HostUI:RenameSub(4, 3, "Teleport") end)
     SafeCall("RenameMain2", function() HostUI:RenameMain(2, "Universal Tools") end)
     SafeCall("RenameSub22", function() HostUI:RenameSub(2, 2, "FE Tools") end)
 end
 
--- 3) 通知适配
 local function Notify(title, content, duration, icon)
     if Runtime.Mode == "Host" and Runtime.Host and type(Runtime.Host.Toast) == "function" then
         pcall(function() Runtime.Host:Toast("[" .. title .. "] " .. tostring(content or "")) end)
@@ -108,7 +80,6 @@ local function Notify(title, content, duration, icon)
     end
 end
 
--- 4) 适配器（功能代码只写一遍）
 local function BridgeAdapter(bridge)
     local A = { _b = bridge }
     function A:Section(t) return self._b:Section(t) end
@@ -118,9 +89,7 @@ local function BridgeAdapter(bridge)
     function A:Slider(t, min, max, def, cb) return self._b:Slider(t, min, max, def, cb) end
     function A:Input(t, placeholder, cb)
         local box = self._b:TextBox(placeholder, "")
-        if box then
-            box:GetPropertyChangedSignal("Text"):Connect(function() cb(box.Text) end)
-        end
+        if box then box:GetPropertyChangedSignal("Text"):Connect(function() cb(box.Text) end) end
         return box
     end
     return A
@@ -132,18 +101,14 @@ local function WindAdapter(tab)
     function A:Label(t) if self._t.Label then pcall(function() self._t:Label({ Title = t }) end) end end
     function A:Button(t, cb) self._t:Button({ Title = t, Callback = cb }) end
     function A:Toggle(t, def, cb) self._t:Toggle({ Title = t, Default = def, Callback = cb }) end
-    function A:Slider(t, min, max, def, cb)
-        if self._t.Slider then self._t:Slider({ Title = t, Min = min, Max = max, Default = def, Callback = cb }) end
-    end
+    function A:Slider(t, min, max, def, cb) if self._t.Slider then self._t:Slider({ Title = t, Min = min, Max = max, Default = def, Callback = cb }) end end
     function A:Input(t, placeholder, cb) self._t:Input({ Title = t, Placeholder = placeholder, Callback = cb }) end
     return A
 end
 
--- 5) 功能模块（逻辑 1:1 保留自原 area51）
 local function BuildArea51(A)
     local speedHackConnection = nil
     local farmConn = nil
-
     A:Toggle("Speed Hack", false, function(v)
         pcall(function()
             local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
@@ -173,8 +138,7 @@ local function BuildArea51(A)
             end
         end)
     end)
-
-    A:Input(".", "Fly Height", function(Value)
+    A:Input("Fly Height", ".", function(Value)
         local height = tonumber(Value) or 0
         if height <= 0 then
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
@@ -219,7 +183,6 @@ local function BuildArea51(A)
         if LocalPlayer.Character then onCharacterAdded(LocalPlayer.Character) end
         LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
     end)
-
     A:Toggle("Farm Money", false, function(v)
         if v then
             farmConn = RunService.Heartbeat:Connect(function()
@@ -234,7 +197,6 @@ local function BuildArea51(A)
             if farmConn then farmConn:Disconnect() farmConn = nil end
         end
     end)
-
     local function AddWeaponButton(name, mid, final, special)
         A:Button("Instant Get " .. name, function()
             local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -261,7 +223,6 @@ local function BuildArea51(A)
     AddWeaponButton("Red Missile Launcher", Vector3.new(625.76, 1127.85, 749.51), Vector3.new(-353.435, 1070.29, 409.856))
     AddWeaponButton("Vulcan", Vector3.new(625.76, 1127.85, 749.51), Vector3.new(-600.846, 950.275, 154.955))
     AddWeaponButton("Ice Crossbow", Vector3.new(625.76, 1127.85, 749.51), Vector3.new(243.564, 687.29, 943.856))
-
     A:Toggle("Auto Supply Crate", false, function(state)
         if not state then
             if _G.RealSupplyLoop then _G.RealSupplyLoop = false end
@@ -327,7 +288,6 @@ local function BuildArea51(A)
             end
         end)
     end)
-
     A:Button("Supply Instant Pickup", function()
         task.spawn(function()
             while task.wait(2) do
@@ -340,7 +300,6 @@ local function BuildArea51(A)
         end)
         Notify("Supply", "Instant pickup enabled", 6, "package")
     end)
-
     local blacklistCoordinates = {
         Vector3.new(-816, 5181, 493),
         Vector3.new(-816, 5181, 630),
@@ -370,7 +329,6 @@ local function BuildArea51(A)
     end
     A:Button("TP to Random SupplyCrate", function() teleportToRandomSupply("SupplyCrate") end)
     A:Button("TP to Random SupplyBall", function() teleportToRandomSupply("SupplyBall") end)
-
     A:Button("Destroy All Damage Parts", function()
         for _, v in ipairs(Workspace:GetDescendants()) do
             if v.Name == "DamagePart" or v.Name == "Lava" or v.Name:find("Fire") then
@@ -411,7 +369,6 @@ local function BuildGunModded(A)
             end
         end)
     end)
-
     local GunMods = { BaseDamage = 999999, FireRate = 0.01, AmmoPerClip = 99999, Spread = 0, Auto = true, CameraShakingEnabled = false }
     local ActiveGunMods = {}
     local function ApplyGunMod(name)
@@ -430,44 +387,27 @@ local function BuildGunModded(A)
     local guns = { "Beretta 87", "AK47", "Desert Eagle", "Golden Eagle", "M16A4", "UZI", "LX1", "LX2", "LX3", "RGB", "Reaper's Scythe", "Water Gun", "Red Missile Launcher", "Ice Crossbow", "Mech O' Matic" }
     for _, g in ipairs(guns) do
         A:Toggle(g .. " Modded", false, function(v)
-            if v then
-                ApplyGunMod(g)
-                Notify("Gun", g .. " Modded", 4, "zap")
-            else
-                ActiveGunMods[g] = false
-            end
+            if v then ApplyGunMod(g); Notify("Gun", g .. " Modded", 4, "zap") else ActiveGunMods[g] = false end
         end)
     end
 end
 
 local function BuildTeleport(A)
     local places = {
-        ["Crafting Room"] = Vector3.new(953.97, 1060, 713.44),
-        ["Shop"] = Vector3.new(588.74, 1151, 665.43),
-        ["Portal"] = Vector3.new(-106.58, 982, 822.14),
-        ["Reaper Room"] = Vector3.new(-190.57, 982.00, 275.41),
-        ["Incinerator"] = Vector3.new(-316.88, 1062, 1158.83),
-        ["Mineshaft"] = Vector3.new(-470.29, 753.00, 871.53),
-        ["T.S.I.Z"] = Vector3.new(168.73, 674.00, 888.06),
-        ["Main Hall"] = Vector3.new(395.33, 982.00, 750.03),
-        ["Factory"] = Vector3.new(-394.82, 1062.00, 865.68),
-        ["Prison"] = Vector3.new(-458.12, 1062.00, 1065.26),
-        ["Sewers"] = Vector3.new(-497.02, 922.10, 79.18),
-        ["Robot Zone"] = Vector3.new(-14.21, 883.00, 731.27),
-        ["Volcano"] = Vector3.new(-510.616, 992.000, 305.217),
-        ["Jack Spawn"] = Vector3.new(-361.266, 864.100, -58.076),
+        ["Crafting Room"] = Vector3.new(953.97, 1060, 713.44), ["Shop"] = Vector3.new(588.74, 1151, 665.43),
+        ["Portal"] = Vector3.new(-106.58, 982, 822.14), ["Reaper Room"] = Vector3.new(-190.57, 982.00, 275.41),
+        ["Incinerator"] = Vector3.new(-316.88, 1062, 1158.83), ["Mineshaft"] = Vector3.new(-470.29, 753.00, 871.53),
+        ["T.S.I.Z"] = Vector3.new(168.73, 674.00, 888.06), ["Main Hall"] = Vector3.new(395.33, 982.00, 750.03),
+        ["Factory"] = Vector3.new(-394.82, 1062.00, 865.68), ["Prison"] = Vector3.new(-458.12, 1062.00, 1065.26),
+        ["Sewers"] = Vector3.new(-497.02, 922.10, 79.18), ["Robot Zone"] = Vector3.new(-14.21, 883.00, 731.27),
+        ["Volcano"] = Vector3.new(-510.616, 992.000, 305.217), ["Jack Spawn"] = Vector3.new(-361.266, 864.100, -58.076),
     }
     for name, pos in pairs(places) do
         A:Button("TP → " .. name, function()
             local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if root then
-                root.CFrame = CFrame.new(623.5, 1072, 749.75)
-                task.wait(2)
-                root.CFrame = CFrame.new(pos)
-            end
+            if root then root.CFrame = CFrame.new(623.5, 1072, 749.75); task.wait(2); root.CFrame = CFrame.new(pos) end
         end)
     end
-
     local nicknameHidden = false
     local originalName = ""
     A:Toggle("Hide Name → Fuck51DevLoL", false, function(v)
@@ -479,13 +419,10 @@ local function BuildTeleport(A)
             local nickname = eventGui:FindFirstChild("Nickname")
             if not nickname then return end
             if v and not nicknameHidden then
-                originalName = nickname.Text
-                nickname.Text = "Fuck51DevLoL"
-                nicknameHidden = true
+                originalName = nickname.Text; nickname.Text = "Fuck51DevLoL"; nicknameHidden = true
                 Notify("Name Hidden", "Now showing: Fuck51DevLoL", 3, "user")
             elseif not v and nicknameHidden then
-                nickname.Text = originalName
-                nicknameHidden = false
+                nickname.Text = originalName; nicknameHidden = false
                 Notify("Name Restored", "Back to original name", 3, "user")
             end
         end)
@@ -494,22 +431,12 @@ end
 
 local function BuildFETools(A)
     local connections = {}
-
-    A:Button("Player Join Notification", function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/boyscp/scriscriptsc/main/bbn.lua"))()
-    end)
-    A:Button("Noclip", function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/TtmScripter/OtherScript/main/Noclip"))()
-    end)
-    A:Button("Fly", function()
-        loadstring(game:HttpGet("https://pastebin.com/raw/brP8SAfJ"))()
-    end)
+    A:Button("Player Join Notification", function() loadstring(game:HttpGet("https://raw.githubusercontent.com/boyscp/scriscriptsc/main/bbn.lua"))() end)
+    A:Button("Noclip", function() loadstring(game:HttpGet("https://raw.githubusercontent.com/TtmScripter/OtherScript/main/Noclip"))() end)
+    A:Button("Fly", function() loadstring(game:HttpGet("https://pastebin.com/raw/brP8SAfJ"))() end)
     A:Button("Save Position", function()
         local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if root then
-            _G.savedPosition = root.Position
-            Notify("Position", "Saved!", 3, "save")
-        end
+        if root then _G.savedPosition = root.Position; Notify("Position", "Saved!", 3, "save") end
     end)
     A:Button("Copy Position", function()
         if _G.savedPosition then
@@ -527,31 +454,20 @@ local function BuildFETools(A)
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr ~= LocalPlayer and plr.Character then
                 local hl = Instance.new("Highlight")
-                hl.FillColor = Color3.fromRGB(255, 0, 255)
-                hl.OutlineColor = Color3.new(1, 1, 1)
-                hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                hl.Adornee = plr.Character
-                hl.Parent = plr.Character
+                hl.FillColor = Color3.fromRGB(255, 0, 255); hl.OutlineColor = Color3.new(1, 1, 1)
+                hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; hl.Adornee = plr.Character; hl.Parent = plr.Character
             end
         end
     end)
-
-    A:Toggle("Night Vision", false, function(v)
-        game.Lighting.Ambient = v and Color3.new(1, 1, 1) or Color3.new(0, 0, 0)
-    end)
-
+    A:Toggle("Night Vision", false, function(v) game.Lighting.Ambient = v and Color3.new(1, 1, 1) or Color3.new(0, 0, 0) end)
     A:Toggle("Infinite Jump", false, function(v)
         if v then
             table.insert(connections, UserInputService.JumpRequest:Connect(function()
                 local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
                 if hum then hum:ChangeState("Jumping") end
             end))
-        else
-            for _, c in ipairs(connections) do c:Disconnect() end
-            connections = {}
-        end
+        else for _, c in ipairs(connections) do c:Disconnect() end; connections = {} end
     end)
-
     A:Toggle("Auto Interact", false, function(v)
         if v then
             table.insert(connections, RunService.Heartbeat:Connect(function()
@@ -559,96 +475,54 @@ local function BuildFETools(A)
                     if obj:IsA("ProximityPrompt") then fireproximityprompt(obj) end
                 end
             end))
-        else
-            for _, c in ipairs(connections) do c:Disconnect() end
-            connections = {}
-        end
+        else for _, c in ipairs(connections) do c:Disconnect() end; connections = {} end
     end)
 end
 
--- 6) 分发：宿主接管 / WindUI 回退
 if Runtime.Mode == "Host" then
     local bridge = Runtime.Bridge
-
-    SafeCall("Build Area51", function()
-        bridge:UsePageIndex(4, 1, "Replace")
-        BuildArea51(BridgeAdapter(bridge))
-    end)
-    SafeCall("Build GunModded", function()
-        bridge:UsePageIndex(4, 2, "Replace")
-        BuildGunModded(BridgeAdapter(bridge))
-    end)
-    SafeCall("Build Teleport", function()
-        bridge:UsePageIndex(4, 3, "Replace")
-        BuildTeleport(BridgeAdapter(bridge))
-    end)
-    SafeCall("Build FETools", function()
-        bridge:UsePageIndex(2, 2, "Replace")
-        BuildFETools(BridgeAdapter(bridge))
-    end)
+    SafeCall("Build Area51", function() bridge:UsePageIndex(4, 1, "Replace"); BuildArea51(BridgeAdapter(bridge)) end)
+    SafeCall("Build GunModded", function() bridge:UsePageIndex(4, 2, "Replace"); BuildGunModded(BridgeAdapter(bridge)) end)
+    SafeCall("Build Teleport", function() bridge:UsePageIndex(4, 3, "Replace"); BuildTeleport(BridgeAdapter(bridge)) end)
+    SafeCall("Build FETools", function() bridge:UsePageIndex(2, 2, "Replace"); BuildFETools(BridgeAdapter(bridge)) end)
     SafeCall("Focus", function() bridge:Focus() end)
-
     Notify("RealYoHub", "Handshake OK - hosted by RealYoUI", 6, "crown")
 else
-    local okWind, WindUI = pcall(function()
-        return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
-    end)
-    if not okWind or type(WindUI) ~= "table" then
-        warn("[RealYoHub][ERR] WindUI load failed: " .. tostring(WindUI))
-        return
-    end
-
+    local okWind, WindUI = pcall(function() return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))() end)
+    if not okWind or type(WindUI) ~= "table" then warn("[RealYoHub][ERR] WindUI load failed: " .. tostring(WindUI)); return end
     local createUI
     local function LoadScript() createUI() end
-
     WindUI:Popup({
-        Title = "RealYoHub V1.2.4",
-        IconThemed = true,
+        Title = "RealYoHub V1.2.4", IconThemed = true,
         Content = "Welcome " .. LocalPlayer.Name .. "\nArea 51 All ready",
         Buttons = {
             { Title = "Leave", Variant = "Secondary", Callback = function() end },
             { Title = "Execute", Icon = "zap", Variant = "Primary", Callback = function() LoadScript() end },
         },
     })
-
     createUI = function()
         local Window = WindUI:CreateWindow({
-            Title = "RealYoHub V1.2.4",
-            Icon = "palette",
+            Title = "RealYoHub V1.2.4", Icon = "palette",
             Author = "Welcome " .. LocalPlayer.Name .. "\nMade by KevinSze",
-            Folder = "RealYo",
-            Size = UDim2.fromOffset(550, 380),
-            Theme = "Light",
-            User = { Enabled = true, Anonymous = true },
-            SideBarWidth = 200,
-            HideSearchBar = false,
+            Folder = "RealYo", Size = UDim2.fromOffset(550, 380), Theme = "Light",
+            User = { Enabled = true, Anonymous = true }, SideBarWidth = 200, HideSearchBar = false,
         })
         Window:Tag({ Title = "51 Area", Color = Color3.fromHex("#00ffff") })
         Window:EditOpenButton({
-            Title = "RealYoHub",
-            Icon = "crown",
-            CornerRadius = UDim.new(0, 8),
-            StrokeThickness = 3,
-            Color = ColorSequence.new(
-                Color3.fromRGB(255, 255, 0), Color3.fromRGB(255, 165, 0),
-                Color3.fromRGB(255, 0, 0), Color3.fromRGB(139, 0, 0)
-            ),
+            Title = "RealYoHub", Icon = "crown", CornerRadius = UDim.new(0, 8), StrokeThickness = 3,
+            Color = ColorSequence.new(Color3.fromRGB(255, 255, 0), Color3.fromRGB(255, 165, 0), Color3.fromRGB(255, 0, 0), Color3.fromRGB(139, 0, 0)),
             Draggable = true,
         })
-
         local Area51Tab = Window:Tab({ Title = "Area 51", Icon = "globe" })
         local Area51GunTPTab = Window:Tab({ Title = "Gun Modded", Icon = "crosshair" })
         local Area51TPTab = Window:Tab({ Title = "Teleport", Icon = "map-pin" })
         local FETab = Window:Tab({ Title = "FE Tools", Icon = "zap" })
-
         SafeCall("Wind Build Area51", function() BuildArea51(WindAdapter(Area51Tab)) end)
         SafeCall("Wind Build GunModded", function() BuildGunModded(WindAdapter(Area51GunTPTab)) end)
         SafeCall("Wind Build Teleport", function() BuildTeleport(WindAdapter(Area51TPTab)) end)
         SafeCall("Wind Build FETools", function() BuildFETools(WindAdapter(FETab)) end)
-
         Notify("RealYoHub V1.2.4", "Loaded successfully!\nRightControl = Toggle Menu", 8, "crown")
         Window:AutoSaveConfig(true)
     end
 end
-
 print(("[RealYoHub] script finished: Mode=%s"):format(Runtime.Mode))
