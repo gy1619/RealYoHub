@@ -52,7 +52,7 @@ if AUTO_ACCEPT and HostUI then
     local ok, success, bridgeOrErr = pcall(function()
         return HostUI:RequestGameBridge({
             Brand = GAME.Brand, Protocol = HostUI.BridgeProtocol or 2, Name = GAME.Name,
-            Category = "腳本中心", Sub = "自家腳本", Mode = "Replace", Focus = false,
+            Category = "Script Hub", Sub = "ReaYoHub", Mode = "Replace", Focus = false,
         })
     end)
     if ok and success == true and type(bridgeOrErr) == "table" then
