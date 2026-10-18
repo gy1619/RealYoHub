@@ -1,5 +1,5 @@
--- RealYoUI_App.lua
-local LIB_URL = "https://raw.githubusercontent.com/gy1619/RealYoHub/refs/heads/main/Astool.lua?t=" .. os.time()
+-- Main Script.lua
+local LIB_URL = "https://raw.githubusercontent.com/gy1619/RealYoHub/refs/heads/main/RealYoUI.lua?t=" .. os.time()
 local UI
 
 do
@@ -21,9 +21,6 @@ UI:Initialize({
     Subtitle = "SZE",
 })
 
--- ============================================================
--- 局部变量映射层
--- ============================================================
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
@@ -69,9 +66,6 @@ local SetAutoLoad = UI.SetAutoLoad
 
 local function ScrollOf(page) return page:FindFirstChildOfClass("ScrollingFrame") end
 
--- ============================================================
--- 通用功能内核
--- ============================================================
 local Mods = {
     SpeedOn = false, Speed = 16, JumpOn = false, Jump = 50, Fly = false, FlySpeed = 50,
     Noclip = false, InfJump = false, HealthLock = false, AntiAFK = false, NoFog = false,
@@ -184,9 +178,6 @@ local function UpdatePreviewESP()
 end
 RunService.RenderStepped:Connect(function() if ESP.Rainbow and UI.UIVisible then UpdatePreviewESP() end end)
 
--- ============================================================
--- 内容填充
--- ============================================================
 local home = ScrollOf(pages[1][1])
 MakeText(home, "當前狀態: " .. License.Status, COL.Green)
 MakeButton(home, "前往DC群組", function() setclipboard("https://discord.gg/SjRufjdF33") end)
@@ -203,10 +194,19 @@ SafeClick(copyBtn, function() if setclipboard then pcall(function() setclipboard
 MakeSlider(home, "繪制刷新幀率", 10, 120, 60, function() end)
 local homeGrid = CreateGrid(home)
 MakeToggle(homeGrid, "刷新率", false, function(on) end)
+MakeToggle(homeGrid, "防禁令", false, function(on) Toast("防禁令(殼): " .. (on and "開啟" or "關閉")) end)
+MakeToggle(homeGrid, "測試4", true, function(on) end)
 MakeToggle(homeGrid, "水印", false, function(on) end)
+MakeToggle(homeGrid, "測試1", false, function() end)
+MakeToggle(homeGrid, "測試2", false, function() end)
+MakeToggle(homeGrid, "測試3", true, function() end)
+MakeToggle(homeGrid, "節能模式", false, function() end)
+MakeDropdown(home, "繪制樣式", { "暗淡淺灰", "霓虹彩虹", "經典白色" }, "暗淡淺灰", function(opt) Toast("繪制樣式: " .. opt) end)
+MakeDropdown(home, "測試", { "123", "456", "789" }, "123", function(opt) Toast("測試: " .. opt) end)
+MakeButton(home, "測試按鈕", function() Toast("殼功能, 未配置") end)
 MakeText(home, "剩餘時間: " .. License.Remain, COL.Green)
 MakeText(home, "SZE內部", COL.Red)
-MakeText(home, "歡迎使用 暂时免费", COL.TextDark)
+MakeText(home, "歡迎使用 如果你是買來的 那麼你吃上了 脚本未公開", COL.TextDark)
 
 local sc12 = ScrollOf(pages[1][2])
 MakeSection(sc12, "語言設置")
@@ -226,14 +226,14 @@ MakeButton(cfgGrid, "刪除配置", function() local n = cfgNameBox.Text:gsub("^
 MakeButton(cfgGrid, "刷新列表", function() cfgDrop.SetOptions(ListConfigNames()); Toast("配置列表已刷新") end)
 local autoOn0, autoName0 = GetAutoLoad()
 MakeToggle(cfg, "自動加載配置", autoOn0, function(on) local n = cfgNameBox.Text:gsub("^%s+", ""):gsub("%s+$", ""); if n == "" then n = "default" end; SetAutoLoad(on, n); Toast(on and ("执行將自動加載: " .. n) or "關閉自動加載") end, false)
-MakeText(cfg, "配置存於注入器目錄 RealYoUI_Configs", COL.TextDim)
+MakeText(cfg, "配置存於注入器目錄 RealYo_Configs", COL.TextDim)
 
 local sc14 = ScrollOf(pages[1][4])
 MakeSection(sc14, "主題與邊框")
--- ★ 关键修复：主题下拉框使用英文 Key，解决语言切换后变不回去的问题
-local themeOptions = { "Classic", "DeepBlue", "Cyber", "Vampire" }
-MakeDropdown(sc14, "罐頭主題", themeOptions, "Classic", function(opt)
-    ApplyTheme(opt)
+local themeOptions = { T("經典"), T("深藍"), T("賽博"), T("吸血") }
+MakeDropdown(sc14, "罐頭主題", themeOptions, T("經典"), function(opt)
+    local nameMap = { Classic = "經典", ["Deep Blue"] = "深藍", Cyber = "賽博", Vampire = "吸血" }
+    ApplyTheme(nameMap[opt] or opt)
 end)
 MakeInlineAlphaSlider(FlowOf(sc14))
 MakeDropdown(sc14, "邊框樣式", { "彩虹", "單色" }, "彩虹", function(o) UI.AP.BorderRainbow = (o == "彩虹"); Toast(UI.AP.BorderRainbow and "邊框: 彩虹" or "邊框: 單色") end)
@@ -246,7 +246,7 @@ pickerInfoLabel = MakeText(sc14, "目標: UI底 (拖動畫板套用)", COL.TextD
 MakeColorPicker(sc14)
 
 local draw = ScrollOf(pages[2][1])
-MakeSection(draw, "ESP 透視")
+MakeSection(draw, "ESP 透視控制 (所見即所得)")
 local espGrid = CreateGrid(draw)
 MakeToggle(espGrid, "啟動透視", false, function(on) ESP.Enabled = on; UpdatePreviewESP() end)
 MakeToggle(espGrid, "顯示名字", false, function(on) ESP.Names = on end)
@@ -294,9 +294,8 @@ MakeButton(util, "重加入服務器", function() pcall(function() TeleportServi
 MakeText(util, "管理员命令脚本", COL.TextDim)
 
 local script1 = ScrollOf(pages[4][1])
--- ★ 关键修复：Area51 按钮的 err 未定义问题 + 秒刷 URL
-MakeButton(script1, "Survive in area 51!", function()
-    local url = "https://raw.githubusercontent.com/gy1619/RealYoHub/refs/heads/main/Area51.lua?t=" .. os.time()
+MakeButton(script1, "外接：Area51 (RealYoHub)", function()
+    local url = "https://raw.githubusercontent.com/gy1619/RealYoHub/refs/heads/main/area51.lua?t=" .. os.time()
     local ok, err = pcall(function() loadstring(game:HttpGet(url))() end)
     Toast(ok and "Area51 已执行" or ("Area51 失败: " .. tostring(err):sub(1, 60)))
 end)
@@ -304,7 +303,7 @@ MakeButton(script1, "BrookHaven RP", function() local ry = pcall(function() load
 MakeButton(script1, "My Restaurant", function() local ry = pcall(function() loadstring(game:HttpGet("https://gist.githubusercontent.com/gy1619/a44f37202fd255c36bfd2e05b66204bd/raw/374703400612786c6ad8b1dbe57d9de42f3c879b/My%20Restaurant.lua"))() end); Toast(ry and "已执行" or "未知错误") end)
 MakeButton(script1, "Cut Grass", function() local ry = pcall(function() loadstring(game:HttpGet("https://gist.githubusercontent.com/gy1619/58841eb6cb738a4c9fffeaee95d8d6c8/raw/77d5043da62b0a092f0416787d6ca284899d8ece/Cut%20Grass.lua"))() end); Toast(ry and "已执行" or "未知错误") end)
 MakeButton(script1, "Poop a Big Poop", function() local ry = pcall(function() loadstring(game:HttpGet("https://gist.githubusercontent.com/gy1619/ddd84a349399d4059acd9778c79b73c4/raw/403cdb6417fc2a5af213d0eaafde1a643b1d6155/pabp.lua"))() end); Toast(ry and "已执行" or "未知错误") end)
-MakeText(script1, "RealYoHub", COL.TextDim)
+MakeText(script1, "自家脚本 RealYoHub", COL.TextDim)
 
 local script2 = ScrollOf(pages[4][2]); MakeText(script2, "尚未完善", COL.TextDim)
 local script3 = ScrollOf(pages[4][3]); MakeText(script3, "尚未完善", COL.TextDim)
@@ -312,9 +311,6 @@ local script4 = ScrollOf(pages[4][4])
 MakeButton(script4, "加載 Infinite Yield", function() local ok = pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))() end); Toast(ok and "Infinite Yield 已啟動" or "加載失敗 (網絡/注入器限制)") end)
 MakeText(script4, "管理员命令脚本", COL.TextDim)
 
--- ============================================================
--- 初始化收尾
--- ============================================================
 LoadAvatar()
 task.delay(2.5, UpdatePreviewESP)
 LocalPlayer.CharacterAdded:Connect(function() taskWait(2); LoadAvatar() end)
