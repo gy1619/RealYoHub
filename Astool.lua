@@ -1,10 +1,10 @@
--- PremiumUI.lua
--- PremiumUI Standalone UI Library + GameBridge Takeover Protocol V3.6 (Google Translate Fix)
+-- RealYoUI.lua
+-- RealYoUI Standalone UI Library + GameBridge Takeover Protocol V3.7
 local Lib = {
-    Version = "3.6.0",
-    Brand = "PremiumUI",
+    Version = "3.7.0",
+    Brand = "RealYoUI",
     BridgeProtocol = 2,
-    IsPremiumUI = true,
+    IsRealYoUI = true,
     Initialized = false,
 }
 
@@ -40,7 +40,6 @@ local function Create(class, props, parent)
 end
 Lib.Create = Create
 
--- ★ 关键修复：AddCorner 必须在 Toast 之前定义
 local function AddCorner(parent, r) return Create("UICorner", { CornerRadius = UDim.new(0, r) }, parent) end
 Lib.AddCorner = AddCorner
 
@@ -51,23 +50,17 @@ local COL = {
 }
 Lib.COL = COL
 
--- ============================================================
--- 翻译系统 (Google Translate API + 异步批量 + 缓存)
--- ============================================================
-local currentLang = "zh" -- 默认中文
+local currentLang = "zh"
 local TranslationCache = {}
-local isTranslating = false
 
--- 核心翻译函数 (同步，带缓存)
-local function GetTranslation(text)
+local function TranslateText(text)
     if not text or text == "" then return "" end
+    if currentLang == "zh" then return text end
     if TranslationCache[text] then return TranslationCache[text] end
     
-    -- 尝试调用 Google API
     local ok, result = pcall(function()
         local url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=en&dt=t&q=" .. HttpService:UrlEncode(text)
         local response = HttpService:GetAsync(url)
-        -- Google 返回格式: [[["Hello","你好",null,null,1]],null,"zh-CN"]
         local data = HttpService:JSONDecode(response)
         if data and data[1] and data[1][1] and data[1][1][1] then
             return data[1][1][1]
@@ -79,16 +72,12 @@ local function GetTranslation(text)
         TranslationCache[text] = result
         return result
     end
-    
-    -- 失败时返回原文，防止 UI 空白
     return text
 end
 
--- T() 函数：中文直接返回，英文查缓存或实时翻译
 local function T(s)
     if s == nil then return "" end
-    if currentLang == "zh" then return s end
-    return GetTranslation(s)
+    return TranslateText(s)
 end
 Lib.T = T
 
@@ -106,17 +95,12 @@ local function ApplyLanguage()
     for _, e in ipairs(langRegistry) do
         local o = e.obj
         if o and o.Parent then
-            if e.custom then 
-                e.custom()
+            if e.custom then e.custom()
             elseif currentLang == "zh" then
-                -- 切换回中文时，恢复原文
-                if e.ph then o.PlaceholderText = e.zh
-                else o.Text = e.zh end
+                if e.ph then o.PlaceholderText = e.zh else o.Text = e.zh end
             else
-                -- 英文模式，使用翻译（如果已缓存）或原文
                 local trans = TranslationCache[e.zh] or e.zh
-                if e.ph then o.PlaceholderText = trans
-                else o.Text = trans end
+                if e.ph then o.PlaceholderText = trans else o.Text = trans end
             end
         end
     end
@@ -141,7 +125,7 @@ local function HashStr(s)
 end
 Lib.HashStr = HashStr
 
-local DEVICE_ID = HashStr(LocalPlayer.UserId .. "_" .. GetHWID()) .. HashStr("PremiumUI_SZE" .. LocalPlayer.UserId)
+local DEVICE_ID = HashStr(LocalPlayer.UserId .. "_" .. GetHWID()) .. HashStr("RealYo_SZE" .. LocalPlayer.UserId)
 Lib.DEVICE_ID = DEVICE_ID
 
 local License = {
@@ -156,7 +140,7 @@ local function RegisterSetting(name, kind, get, set)
 end
 Lib.RegisterSetting = RegisterSetting
 
-local CFG_DIR = "PremiumUI_Configs"
+local CFG_DIR = "RealYo_Configs"
 local AUTO_FILE = CFG_DIR .. "/_autoload_.json"
 local function FileSupport() return type(writefile) == "function" and type(readfile) == "function" and type(isfile) == "function" end
 local function EnsureFolder() pcall(function() if type(makefolder) == "function" and not isfolder(CFG_DIR) then makefolder(CFG_DIR) end end) end
@@ -350,13 +334,10 @@ local function EstW(text, size)
     return (cjk / 3) * size * 1.05 + (bytes - cjk) * size * 0.7 + S(4)
 end
 
--- ★ 关键修复：Flow 布局缓存，支持页面清空后重建
 local flowByScroll = {}
 local function FlowOf(scroll)
     local flow = flowByScroll[scroll]
-    if flow and flow._container and flow._container.Parent == scroll then
-        return flow
-    end
+    if flow and flow._container and flow._container.Parent == scroll then return flow end
     
     local container = Create("Frame", { Size = UDim2.new(1, -S(8), 0, 0), BackgroundTransparency = 1, Parent = scroll })
     local slots = {}
@@ -411,9 +392,7 @@ local function FlowOf(scroll)
 end
 Lib.FlowOf = FlowOf
 
-function Lib:ClearFlowCache(scroll)
-    flowByScroll[scroll] = nil
-end
+function Lib:ClearFlowCache(scroll) flowByScroll[scroll] = nil end
 
 local function AsFlow(parent) return (type(parent) == "table" and parent.Add) and parent or FlowOf(parent) end
 local function CreateGrid(scroll) return FlowOf(scroll) end
@@ -883,24 +862,18 @@ local SetUIVisible
 local function SetLanguage(lang)
     currentLang = lang
     if lang == "en" then
-        -- 异步批量翻译，防止卡死和限流
-        if not isTranslating then
-            isTranslating = true
-            Toast("Translating... (Please wait)")
-            task.spawn(function()
-                for _, e in ipairs(langRegistry) do
-                    if e.zh and e.obj and e.obj.Parent then
-                        local trans = GetTranslation(e.zh)
-                        if e.ph then e.obj.PlaceholderText = trans else e.obj.Text = trans end
-                        task.wait(0.02) -- 节流
-                    end
+        task.spawn(function()
+            Toast("Translating...")
+            for _, e in ipairs(langRegistry) do
+                if e.zh and e.obj and e.obj.Parent then
+                    local trans = TranslateText(e.zh)
+                    if e.ph then e.obj.PlaceholderText = trans else e.obj.Text = trans end
+                    task.wait(0.02)
                 end
-                isTranslating = false
-                Toast("Translation Complete!")
-            end)
-        end
+            end
+            Toast("Translation Complete!")
+        end)
     else
-        -- 切回中文，直接恢复原文
         ApplyLanguage()
         Toast("語言: 中文")
     end
@@ -912,7 +885,7 @@ function Lib:Initialize(opts)
     opts = opts or {}
 
     ScreenGui = Create("ScreenGui", {
-        Name = "PremiumUI_SZE" .. math.random(10000, 99999), ResetOnSpawn = false,
+        Name = "RealYo_SZE" .. math.random(10000, 99999), ResetOnSpawn = false,
         IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     })
     ScreenGui.Parent = (okCore and CoreGuiService) or LocalPlayer:WaitForChild("PlayerGui")
@@ -1066,13 +1039,9 @@ function Lib:Initialize(opts)
     return self
 end
 
--------------------------------------------------
--- GameBridge Protocol V3 (Takeover) - 最终防御版
--------------------------------------------------
 local function FindPageIndices(category, sub)
     category = tostring(category):gsub("%s+", "")
     sub = tostring(sub):gsub("%s+", "")
-    
     local mNames = Lib._mainNames or { "首頁設置", "繪制面板", "通用功能", "腳本中心" }
     local sSets = Lib._subNameSets or {
         { "公告相關", "其他相關", "配置相關", "界面相關" },
@@ -1218,15 +1187,12 @@ function Lib:RequestGameBridge(payload)
     return true, bridge
 end
 
--------------------------------------------------
--- Host Publish (秒刷发布)
--------------------------------------------------
 local function PublishHost()
-    pcall(function() shared.PremiumUI = Lib end)
-    pcall(function() _G.PremiumUI = Lib end)
-    pcall(function() if getgenv then getgenv().PremiumUI = Lib end end)
+    pcall(function() shared.RealYoUI = Lib end)
+    pcall(function() _G.RealYoUI = Lib end)
+    pcall(function() if getgenv then getgenv().RealYoUI = Lib end end)
 end
 PublishHost()
-print(">>> [PremiumUI] Host published: shared/_G/getgenv PremiumUI ready, BridgeProtocol=2")
+print(">>> [RealYoUI] Host published: shared/_G/getgenv RealYoUI ready, BridgeProtocol=2")
 
 return Lib
