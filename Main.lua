@@ -1,5 +1,5 @@
 -- Main Script.lua
-local LIB_URL = "https://raw.githubusercontent.com/gy1619/RealYoHub/refs/heads/main/RealYoUI.lua?t=" .. os.time()
+local LIB_URL = "https://raw.githubusercontent.com/gy1619/RealYoHub/refs/heads/main/Astool.lua?t=" .. os.time()
 local UI
 
 do
@@ -12,7 +12,7 @@ do
 end
 
 if not UI or not UI.IsRealYoUI then
-    warn("[RealYoUI] UI library load failed")
+    warn("[RealYoUI] UI library load failed. Check GitHub URL or syntax.")
     return
 end
 
