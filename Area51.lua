@@ -91,8 +91,8 @@ end
 
 -- 2) 接管映射改名（核心同tab聚合 / 通用进空白tab / 替换即改名）
 if Runtime.Mode == "Host" then
-    SafeCall("RenameMain4", function() HostUI:RenameMain(4, "RealYoHub") end)
-    SafeCall("RenameSub41", function() HostUI:RenameSub(4, 1, "Area 51") end)
+    SafeCall("RenameMain4", function() HostUI:RenameMain(4, "Area 51") end)
+    SafeCall("RenameSub41", function() HostUI:RenameSub(4, 1, "Main") end)
     SafeCall("RenameSub42", function() HostUI:RenameSub(4, 2, "Gun Modded") end)
     SafeCall("RenameSub43", function() HostUI:RenameSub(4, 3, "Teleport") end)
     SafeCall("RenameMain2", function() HostUI:RenameMain(2, "Universal Tools") end)
@@ -174,7 +174,7 @@ local function BuildArea51(A)
         end)
     end)
 
-    A:Input("Fly Height", ".", function(Value)
+    A:Input(".", "Fly Height", function(Value)
         local height = tonumber(Value) or 0
         if height <= 0 then
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
