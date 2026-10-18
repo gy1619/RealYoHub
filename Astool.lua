@@ -1,12 +1,13 @@
 -- PremiumUI.lua
--- PremiumUI Standalone UI Library + GameBridge Takeover Protocol V3
-
+-- PremiumUI Standalone UI Library + GameBridge Takeover Protocol V3.1
+-- FIX: AddCorner 必须定义在 Toast 之前（Lua upvalue 作用域），否则 Toast 调用 nil 全局崩溃
 local Lib = {
-    Version = "3.0.0",
+    Version = "3.1.0",
     Brand = "PremiumUI",
     BridgeProtocol = 2,
     IsPremiumUI = true,
     Initialized = false,
+    TakeoverSessions = {},
 }
 
 local Players = game:GetService("Players")
@@ -40,6 +41,10 @@ local function Create(class, props, parent)
     return obj
 end
 Lib.Create = Create
+
+-- ★ 关键修复：AddCorner 提前定义，保证 Toast 等早期函数能捕获到它
+local function AddCorner(parent, r) return Create("UICorner", { CornerRadius = UDim.new(0, r) }, parent) end
+Lib.AddCorner = AddCorner
 
 local COL = {
     TextDark = Color3.fromRGB(70, 70, 70), TextDim = Color3.fromRGB(110, 110, 110),
@@ -212,7 +217,8 @@ Lib.SaveConfig = SaveConfig
 
 local function LoadConfig(name)
     if not FileSupport() then Toast("當前注入器不支持文件讀取") return end
-    local ok, raw = pcall(function() if not isfile(CFG_DIR .. "/" .. name .. ".json") then return nil end return readfile(CFG_DIR .. "/" .. name .. ".json") end)
+    local path = CFG_DIR .. "/" .. name .. ".json"
+    local ok, raw = pcall(function() if not isfile(path) then return nil end return readfile(path) end)
     if not ok or not raw then Toast("配置不存在: " .. name) return end
     local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
     if not ok2 or type(data) ~= "table" then Toast("配置損壞: " .. name) return end
@@ -244,9 +250,6 @@ local function SetAutoLoad(enabled, name)
     pcall(function() writefile(AUTO_FILE, HttpService:JSONEncode({ enabled = enabled, name = name })) end)
 end
 Lib.SetAutoLoad = SetAutoLoad
-
-local function AddCorner(parent, r) return Create("UICorner", { CornerRadius = UDim.new(0, r) }, parent) end
-Lib.AddCorner = AddCorner
 
 local rainbowGrads = {}
 local rainbowT0 = tick()
@@ -875,7 +878,7 @@ local function LoadAvatar()
         if model.PrimaryPart then model:PivotTo(CFrame.new(0, 0, 0) * CFrame.Angles(0, math.rad(180), 0)) end
     end)
     if not ok3d then
-        -- fallback thumbnail logic could go here if needed
+        -- fallback: keep viewport empty
     end
 end
 Lib.LoadAvatar = LoadAvatar
@@ -890,20 +893,20 @@ end
 function Lib:Initialize(opts)
     if self.Initialized then return self end
     opts = opts or {}
-    
+
     ScreenGui = Create("ScreenGui", {
         Name = "PremiumUI_SZE" .. math.random(10000, 99999), ResetOnSpawn = false,
         IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     })
     ScreenGui.Parent = (okCore and CoreGuiService) or LocalPlayer:WaitForChild("PlayerGui")
     self.ScreenGui = ScreenGui
-    
+
     ToastHolder = Create("Frame", {
         Size = UDim2.fromOffset(S(300), S(160)), Position = UDim2.fromOffset((vpSize.X - S(300)) / 2, S(12)),
         BackgroundTransparency = 1, Parent = ScreenGui, ZIndex = 60,
     })
     Create("UIListLayout", { Padding = UDim.new(0, S(6)), HorizontalAlignment = Enum.HorizontalAlignment.Center }, ToastHolder)
-    
+
     RunService.RenderStepped:Connect(function()
         local rot = ((tick() - rainbowT0) * 24) % 360
         for _, g in ipairs(rainbowGrads) do g.Rotation = rot end
@@ -962,7 +965,7 @@ function Lib:Initialize(opts)
             task.delay(0.2, function() if not UIVisible then for _, p in ipairs(panelList) do p.Visible = false end end end)
         end
     end
-    
+
     SafeClick(CloseBtn, function() SetUIVisible(false) end)
     MakeDragHandle(MainPanel, UDim2.new(1, -S(40), 0, S(28)), UDim2.fromOffset(S(4), 0))
     MakeDragHandle(SideOuter, UDim2.new(1, 0, 0, S(26)), UDim2.fromOffset(0, 0))
@@ -985,6 +988,9 @@ function Lib:Initialize(opts)
         TweenService:Create(TopIndicator, EASE, { Position = UDim2.new((j - 1) * 0.25, S(5), 0, S(6)) }):Play()
         SlideToPage(pages[currentMain][j], dir, 0)
     end
+    self._selectMain = SelectMain
+    self._selectSub = SelectSub
+
     for i, name in ipairs(mainNames) do
         local b = Create("TextButton", { Size = UDim2.new(1, 0, 0, sideBtnH), BackgroundTransparency = 1, Text = T(name), TextColor3 = (i == 1) and COL.White or COL.TextDark, Font = Enum.Font.GothamMedium, TextSize = TS(14), AutoButtonColor = false, Parent = SideList })
         sideButtons[i] = b; SafeClick(b, function() SelectMain(i) end); RegisterLang(b, name)
@@ -1025,41 +1031,110 @@ function Lib:Initialize(opts)
     self.ApplyTheme = ApplyTheme
     self.SetTargetColor = SetTargetColor
     self.ApplyFont = ApplyFont
-    
     self.GetScroll = function(m, j) return pages[m][j]:FindFirstChildOfClass("ScrollingFrame") end
-    
+
     self.Initialized = true
     return self
 end
 
 -------------------------------------------------
--- GameBridge Protocol V2 (Takeover)
+-- GameBridge Protocol V2 (Takeover) - 真实实现
 -------------------------------------------------
+local function FindPageIndices(category, sub)
+    for m, mn in ipairs(mainNames) do
+        if mn == category then
+            for j, sn in ipairs(subNameSets[m]) do
+                if sn == sub then return m, j end
+            end
+            return m, nil
+        end
+    end
+    return nil, nil
+end
+Lib.FindPage = FindPageIndices
+
+local function ClearPageScroll(scroll)
+    if not scroll then return end
+    for _, c in ipairs(scroll:GetChildren()) do
+        if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
+    end
+    flowByScroll[scroll] = nil
+end
+
 local BridgeMeta = {}
 BridgeMeta.__index = BridgeMeta
 
 function BridgeMeta:UsePage(category, sub, mode)
-    local page, cat, subIdx = self.UI:GetOrCreatePage(category, sub)
-    if not page then return false, "page_create_failed" end
-    if mode ~= "Append" then page:Clear(); page.Scroll.Visible = true end
-    self.Page = page; self.Category = cat; self.SubIndex = subIdx; self.Host = page
+    local m, j = FindPageIndices(category, sub)
+    if not m or not j then return false, "page_not_found" end
+    local scroll = self.UI:GetScroll(m, j)
+    if not scroll then return false, "page_not_ready" end
+    if mode ~= "Append" then ClearPageScroll(scroll) end
+    self.Host = scroll; self.MainIndex = m; self.SubIndex = j
     return true
 end
 
 function BridgeMeta:Focus()
-    -- Handled by Lib logic if needed
+    if self.MainIndex and self.UI._selectMain then
+        self.UI._selectMain(self.MainIndex)
+        self.UI._selectSub(self.SubIndex)
+    end
 end
 
-function BridgeMeta:Grid(host)
-    local target = host or self.Page
-    if type(target) == "table" and target.__type == "page" then target = target.Scroll end
-    local g = CreateGrid(target)
+function BridgeMeta:Grid()
+    local g = CreateGrid(self.Host)
     self.Host = g
     return g
 end
 
+function BridgeMeta:ResetHost()
+    self.Host = self.UI:GetScroll(self.MainIndex, self.SubIndex)
+    return self.Host
+end
+
 function BridgeMeta:ClearPage()
-    -- Handled by Lib logic if needed
+    ClearPageScroll(self.UI:GetScroll(self.MainIndex, self.SubIndex))
+    self:ResetHost()
+end
+
+function BridgeMeta:Create(comp)
+    if type(comp) ~= "table" then return nil, "component_invalid" end
+    local kind = comp.Type or comp.type
+    local host = comp.Host or self.Host
+    local text = comp.Text or comp.text or ""
+    local cb = comp.Callback or comp.callback or comp.OnClick or comp.OnChange
+    if kind == "Label" or kind == "Text" then
+        return MakeText(host, text, comp.Color or COL.TextDark, comp.Size)
+    elseif kind == "Section" then
+        return MakeSection(host, text)
+    elseif kind == "Button" then
+        return MakeButton(host, text, cb)
+    elseif kind == "Toggle" then
+        return MakeToggle(host, text, comp.Default or false, cb, comp.Register)
+    elseif kind == "Slider" then
+        return MakeSlider(host, text, comp.Min or 0, comp.Max or 100, comp.Default or comp.Min or 0, cb)
+    elseif kind == "Dropdown" then
+        local opts = comp.Options or {}
+        return MakeDropdown(host, text, opts, comp.Default or opts[1], cb)
+    elseif kind == "TextBox" or kind == "Input" then
+        return MakeTextBox(host, comp.Placeholder or text, comp.Default or "")
+    elseif kind == "Grid" then
+        return self:Grid()
+    end
+    return nil, "component_unknown:" .. tostring(kind)
+end
+
+function BridgeMeta:Label(text, opts) opts = opts or {}; return self:Create({ Type = "Label", Text = text, Color = opts.Color, Size = opts.Size, Host = opts.Host }) end
+function BridgeMeta:Section(text, opts) opts = opts or {}; return self:Create({ Type = "Section", Text = text, Host = opts.Host }) end
+function BridgeMeta:Button(text, cb, opts) opts = opts or {}; return self:Create({ Type = "Button", Text = text, Callback = cb, Host = opts.Host }) end
+function BridgeMeta:Toggle(text, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Toggle", Text = text, Default = default, Callback = cb, Register = opts.Register, Host = opts.Host }) end
+function BridgeMeta:Slider(text, min, max, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Slider", Text = text, Min = min, Max = max, Default = default, Callback = cb, Host = opts.Host }) end
+function BridgeMeta:Dropdown(text, options, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Dropdown", Text = text, Options = options, Default = default, Callback = cb, Host = opts.Host }) end
+function BridgeMeta:TextBox(placeholder, default, opts) opts = opts or {}; return self:Create({ Type = "TextBox", Placeholder = placeholder, Default = default, Host = opts.Host }) end
+
+function BridgeMeta:Unmount()
+    self:ClearPage()
+    self.Active = false
 end
 
 function Lib:RequestGameBridge(payload)
@@ -1068,14 +1143,24 @@ function Lib:RequestGameBridge(payload)
     if payload.Protocol and payload.Protocol ~= self.BridgeProtocol then return false, "protocol_mismatch" end
     if not self.Initialized then return false, "ui_not_initialized" end
 
-    local category = payload.Category or payload.Name or "External Game"
-    local sub = payload.Sub or "Main"
+    local category = payload.Category or "腳本中心"
+    local sub = payload.Sub or "自家腳本"
+    local m, j = FindPageIndices(category, sub)
+    if not m or not j then return false, "page_not_found" end
+    local scroll = self:GetScroll(m, j)
+    if not scroll then return false, "page_not_ready" end
 
-    -- Simplified Bridge logic for external scripts to inject into existing pages or new ones
+    if payload.Mode ~= "Append" then ClearPageScroll(scroll) end
+
     local bridge = setmetatable({
-        UI = self, Name = payload.Name or "GameScript", Active = true, Protocol = self.BridgeProtocol,
+        UI = self, Name = payload.Name or "GameScript", Active = true,
+        Protocol = self.BridgeProtocol, Host = scroll,
+        MainIndex = m, SubIndex = j,
     }, BridgeMeta)
 
+    if payload.Focus then bridge:Focus() end
+
+    table.insert(self.TakeoverSessions, bridge)
     return true, bridge
 end
 
