@@ -1,5 +1,5 @@
 -- PremiumUI.lua (Astool.lua)
--- PremiumUI Standalone UI Library + GameBridge Takeover Protocol V3.3 (Final Clean)
+-- PremiumUI Standalone UI Library + GameBridge Takeover Protocol V3.3
 local Lib = {
     Version = "3.3.0",
     Brand = "PremiumUI",
@@ -52,7 +52,6 @@ local COL = {
 Lib.COL = COL
 
 local currentLang = "en"
--- ★ 关键修复：清理了所有 key 里的脏空格
 local I18N = {
     ["首頁設置"]="Home",["繪制面板"]="ESP",["通用功能"]="Misc",["腳本中心"]="Scripts",
     ["公告相關"]="Info",["其他相關"]="Other",["配置相關"]="Configs",["界面相關"]="Appearance",
@@ -362,7 +361,12 @@ end
 
 local flowByScroll = {}
 local function FlowOf(scroll)
-    if flowByScroll[scroll] then return flowByScroll[scroll] end
+    -- ★ 关键修复：检查容器是否还被挂载，如果被销毁了就重建
+    local flow = flowByScroll[scroll]
+    if flow and flow._container and flow._container.Parent == scroll then
+        return flow
+    end
+    
     local container = Create("Frame", { Size = UDim2.new(1, -S(8), 0, 0), BackgroundTransparency = 1, Parent = scroll })
     local slots = {}
     local padX, padY = S(12), S(10)
@@ -394,6 +398,7 @@ local function FlowOf(scroll)
         container.Size = UDim2.new(1, -S(8), 0, curY + rowH + S(2))
     end
     local flow = {}
+    flow._container = container
     flow.Add = function(w, h)
         local slot = Create("Frame", { Size = UDim2.fromOffset(math.ceil(w or S(150)), math.ceil(h or S(28))), BackgroundTransparency = 1, Parent = container })
         if (w or 0) >= S(240) then slot:SetAttribute("wide", true) end
@@ -986,7 +991,6 @@ function Lib:Initialize(opts)
         SlideToPage(pages[currentMain][j], dir, 0)
     end
 
-    -- ★ 关键修复：暴露局部变量给 Bridge 协议使用
     self._mainNames = mainNames
     self._subNameSets = subNameSets
     self._sideButtons = sideButtons
