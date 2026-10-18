@@ -1,7 +1,7 @@
 -- RealYoUI.lua
--- RealYoUI Standalone UI Library + GameBridge Takeover Protocol V3.4 (Google Translate Integration)
+-- RealYoUI Standalone UI Library + GameBridge Takeover Protocol V3.5 (MyMemory Translate + Flow Fix)
 local Lib = {
-    Version = "3.4.0",
+    Version = "3.5.0",
     Brand = "RealYoUI",
     BridgeProtocol = 2,
     IsRealYoUI = true,
@@ -52,45 +52,44 @@ local COL = {
 Lib.COL = COL
 
 -- ============================================================
--- Google Translate Integration (弹性翻译)
+-- 翻译系统 (MyMemory API + 智能检测 + 缓存)
 -- ============================================================
 local currentLang = "zh" -- 默认中文
 local TranslationCache = {}
 
--- URL Encode 函数
-local function UrlEncode(str)
-    if str then
-        str = string.gsub(str, "\n", "\r\n")
-        str = string.gsub(str, "([^%w %-%_%.%~])", function(c)
-            return string.format("%%%02X", string.byte(c))
-        end)
-        str = string.gsub(str, " ", "+")
-    end
-    return str
+-- 检测是否包含中文
+local function HasChinese(text)
+    return string.find(text, "[\228-\233][\128-\191]") ~= nil
 end
 
--- 核心翻译函数
 local function TranslateText(text)
     if not text or text == "" then return "" end
-    if currentLang == "zh" then return text end -- 中文直接返回
+    if currentLang == "zh" then return text end -- 中文模式直接返回
+    
+    -- 纯英文/数字/符号，不翻译，直接返回（避免 API 错误和卡顿）
+    if not HasChinese(text) then return text end
     
     -- 查缓存
     if TranslationCache[text] then
         return TranslationCache[text]
     end
 
-    -- 请求 Google API
+    -- 请求 MyMemory API (比 Google 稳定)
     local ok, result = pcall(function()
-        local url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=en&dt=t&q=" .. UrlEncode(text)
+        local encodedText = HttpService:UrlEncode(text)
+        local url = "https://api.mymemory.translated.net/get?q=" .. encodedText .. "&langpair=zh-CN|en"
         local response = HttpService:GetAsync(url)
         local data = HttpService:JSONDecode(response)
-        if data and data[1] and data[1][1] and data[1][1][1] then
-            return data[1][1][1]
+        if data and data.responseData and data.responseData.translatedText then
+            local trans = data.responseData.translatedText
+            -- 过滤掉 API 返回的警告标记
+            if trans:find("MYMEMORY WARNING") then return text end
+            return trans
         end
         return nil
     end)
 
-    if ok and result then
+    if ok and result and result ~= "" then
         TranslationCache[text] = result
         return result
     else
@@ -363,9 +362,16 @@ local function EstW(text, size)
     return (cjk / 3) * size * 1.05 + (bytes - cjk) * size * 0.7 + S(4)
 end
 
+-- ★ 关键修复：Flow 布局缓存，支持页面清空后重建
 local flowByScroll = {}
 local function FlowOf(scroll)
-    if flowByScroll[scroll] then return flowByScroll[scroll] end
+    local flow = flowByScroll[scroll]
+    -- 检查容器是否还有效（Parent 是否还是 scroll）
+    if flow and flow._container and flow._container.Parent == scroll then
+        return flow
+    end
+    
+    -- 重建容器
     local container = Create("Frame", { Size = UDim2.new(1, -S(8), 0, 0), BackgroundTransparency = 1, Parent = scroll })
     local slots = {}
     local padX, padY = S(12), S(10)
@@ -418,6 +424,11 @@ local function FlowOf(scroll)
     return flow
 end
 Lib.FlowOf = FlowOf
+
+-- 暴露清空 Flow 缓存的方法，供 Bridge 使用
+function Lib:ClearFlowCache(scroll)
+    flowByScroll[scroll] = nil
+end
 
 local function AsFlow(parent) return (type(parent) == "table" and parent.Add) and parent or FlowOf(parent) end
 local function CreateGrid(scroll) return FlowOf(scroll) end
@@ -1095,9 +1106,12 @@ function BridgeMeta:UsePageIndex(m, j, mode)
     local scroll = self.UI.GetScroll(m, j)
     if not scroll then return false, "page_not_ready" end
     if mode ~= "Append" then
+        -- 清空页面
         for _, c in ipairs(scroll:GetChildren()) do
             if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
         end
+        -- ★ 关键修复：清空后清除 Flow 缓存，强制下次重建
+        self.UI:ClearFlowCache(scroll)
     end
     self.Host = scroll
     self.MainIndex = m
@@ -1124,6 +1138,7 @@ function BridgeMeta:ClearPage()
         for _, c in ipairs(scroll:GetChildren()) do
             if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
         end
+        self.UI:ClearFlowCache(scroll)
     end
     self.Host = scroll
 end
@@ -1201,6 +1216,7 @@ function Lib:RequestGameBridge(payload)
         for _, c in ipairs(scroll:GetChildren()) do
             if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
         end
+        self:ClearFlowCache(scroll)
     end
 
     local bridge = setmetatable({
@@ -1221,6 +1237,6 @@ local function PublishHost()
     pcall(function() if getgenv then getgenv().RealYoUI = Lib end end)
 end
 PublishHost()
-print("Host published: shared/_G/getgenv RealYoUI ready, BridgeProtocol=2")
+print(">>> [RealYoUI] Host published: shared/_G/getgenv RealYoUI ready, BridgeProtocol=2")
 
 return Lib
