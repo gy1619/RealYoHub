@@ -2,12 +2,11 @@
 -- PremiumUI Standalone UI Library + GameBridge Takeover Protocol V3.1.1
 -- FIX(194): AddCorner 必须在 Toast 之前定义（Lua upvalue 作用域），否则 Toast 调用 nil 全局
 local Lib = {
-    Version = "3.1.1",
+    Version = "3.2.0",
     Brand = "PremiumUI",
     BridgeProtocol = 2,
     IsPremiumUI = true,
     Initialized = false,
-    TakeoverSessions = {},
 }
 
 local Players = game:GetService("Players")
@@ -1139,9 +1138,101 @@ function BridgeMeta:Slider(text, min, max, default, cb, opts) opts = opts or {};
 function BridgeMeta:Dropdown(text, options, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Dropdown", Text = text, Options = options, Default = default, Callback = cb, Host = opts.Host }) end
 function BridgeMeta:TextBox(placeholder, default, opts) opts = opts or {}; return self:Create({ Type = "TextBox", Placeholder = placeholder, Default = default, Host = opts.Host }) end
 
-function BridgeMeta:Unmount()
-    self:ClearPage()
-    self.Active = false
+-------------------------------------------------
+-- GameBridge Protocol V3 (Takeover) - 真实实现
+-------------------------------------------------
+local BridgeMeta = {}
+BridgeMeta.__index = BridgeMeta
+
+function BridgeMeta:UsePageIndex(m, j, mode)
+    local scroll = Lib:GetScroll(m, j)
+    if not scroll then return false, "page_not_ready" end
+    if mode ~= "Append" then
+        for _, c in ipairs(scroll:GetChildren()) do
+            if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
+        end
+    end
+    self.Host = scroll
+    self.MainIndex = m
+    self.SubIndex = j
+    return true
+end
+
+function BridgeMeta:Focus()
+    if self.MainIndex and Lib._selectMain then
+        Lib._selectMain(self.MainIndex)
+        Lib._selectSub(self.SubIndex)
+    end
+end
+
+function BridgeMeta:Grid()
+    local g = Lib.CreateGrid(self.Host)
+    self.Host = g
+    return g
+end
+
+function BridgeMeta:ClearPage()
+    local scroll = Lib:GetScroll(self.MainIndex, self.SubIndex)
+    if scroll then
+        for _, c in ipairs(scroll:GetChildren()) do
+            if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
+        end
+    end
+    self.Host = scroll
+end
+
+function BridgeMeta:Create(comp)
+    if type(comp) ~= "table" then return nil, "component_invalid" end
+    local kind = comp.Type or comp.type
+    local host = comp.Host or self.Host
+    local text = comp.Text or comp.text or ""
+    local cb = comp.Callback or comp.callback or comp.OnClick or comp.OnChange
+    if kind == "Label" or kind == "Text" then
+        return Lib.MakeText(host, text, comp.Color or Lib.COL.TextDark, comp.Size)
+    elseif kind == "Section" then
+        return Lib.MakeText(host, text, Lib.COL.TextDim)
+    elseif kind == "Button" then
+        return Lib.MakeButton(host, text, cb)
+    elseif kind == "Toggle" then
+        return Lib.MakeToggle(host, text, comp.Default or false, cb, comp.Register)
+    elseif kind == "Slider" then
+        return Lib.MakeSlider(host, text, comp.Min or 0, comp.Max or 100, comp.Default or comp.Min or 0, cb)
+    elseif kind == "Dropdown" then
+        local opts = comp.Options or {}
+        return Lib.MakeDropdown(host, text, opts, comp.Default or opts[1], cb)
+    elseif kind == "TextBox" or kind == "Input" then
+        return Lib.MakeTextBox(host, comp.Placeholder or text, comp.Default or "")
+    elseif kind == "Grid" then
+        return self:Grid()
+    end
+    return nil, "component_unknown:" .. tostring(kind)
+end
+
+function BridgeMeta:Label(text, opts) opts = opts or {}; return self:Create({ Type = "Label", Text = text, Color = opts.Color, Size = opts.Size, Host = opts.Host }) end
+function BridgeMeta:Section(text, opts) opts = opts or {}; return self:Create({ Type = "Section", Text = text, Host = opts.Host }) end
+function BridgeMeta:Button(text, cb, opts) opts = opts or {}; return self:Create({ Type = "Button", Text = text, Callback = cb, Host = opts.Host }) end
+function BridgeMeta:Toggle(text, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Toggle", Text = text, Default = default, Callback = cb, Register = opts.Register, Host = opts.Host }) end
+function BridgeMeta:Slider(text, min, max, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Slider", Text = text, Min = min, Max = max, Default = default, Callback = cb, Host = opts.Host }) end
+function BridgeMeta:Dropdown(text, options, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Dropdown", Text = text, Options = options, Default = default, Callback = cb, Host = opts.Host }) end
+function BridgeMeta:TextBox(placeholder, default, opts) opts = opts or {}; return self:Create({ Type = "TextBox", Placeholder = placeholder, Default = default, Host = opts.Host }) end
+
+function Lib:RenameMain(i, newName)
+    if Lib._sideButtons and Lib._sideButtons[i] then
+        Lib._sideButtons[i].Text = Lib.T(newName)
+        return true
+    end
+    return false
+end
+
+function Lib:RenameSub(m, j, newName)
+    if Lib._subNameSets and Lib._subNameSets[m] and Lib._subNameSets[m][j] then
+        Lib._subNameSets[m][j] = newName
+        if Lib._refreshTopNames and Lib._getCurrentMain and Lib._getCurrentMain() == m then
+            Lib._refreshTopNames(m)
+        end
+        return true
+    end
+    return false
 end
 
 function Lib:RequestGameBridge(payload)
@@ -1152,55 +1243,35 @@ function Lib:RequestGameBridge(payload)
 
     local category = payload.Category or "腳本中心"
     local sub = payload.Sub or "自家腳本"
-    local m, j = FindPageIndices(category, sub)
+    local m, j = Lib.FindPage(category, sub)
     if not m or not j then return false, "page_not_found" end
     local scroll = self:GetScroll(m, j)
     if not scroll then return false, "page_not_ready" end
 
-    if payload.Mode ~= "Append" then ClearPageScroll(scroll) end
+    if payload.Mode ~= "Append" then
+        for _, c in ipairs(scroll:GetChildren()) do
+            if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
+        end
+    end
 
     local bridge = setmetatable({
         UI = self, Name = payload.Name or "GameScript", Active = true,
-        Protocol = self.BridgeProtocol, Host = scroll,
-        MainIndex = m, SubIndex = j,
+        Protocol = self.BridgeProtocol, Host = scroll, MainIndex = m, SubIndex = j,
     }, BridgeMeta)
 
     if payload.Focus then bridge:Focus() end
-
-    table.insert(self.TakeoverSessions, bridge)
     return true, bridge
 end
 
 -------------------------------------------------
--- Takeover mapping support: rename tabs + index-based page use
+-- Host Publish (秒刷发布)
 -------------------------------------------------
-function Lib:RenameMain(i, newName)
-    if not (self._mainNames and self._sideButtons) then return false end
-    local b = self._sideButtons[i]
-    if not b then return false end
-    self._mainNames[i] = newName
-    b.Text = self.T(newName)
-    self.RegisterLang(b, newName)
-    return true
+local function PublishHost()
+    pcall(function() shared.PremiumUI = Lib end)
+    pcall(function() _G.PremiumUI = Lib end)
+    pcall(function() if getgenv then getgenv().PremiumUI = Lib end end)
 end
-
-function Lib:RenameSub(m, j, newName)
-    if not (self._subNameSets and self._subNameSets[m]) then return false end
-    self._subNameSets[m][j] = newName
-    if self._getCurrentMain and self._refreshTopNames and self._getCurrentMain() == m then
-        self._refreshTopNames(m)
-    end
-    return true
-end
-
-function BridgeMeta:UsePageIndex(m, j, mode)
-    local scroll = self.UI:GetScroll(m, j)
-    if not scroll then return false, "page_not_ready" end
-    if mode ~= "Append" then ClearPageScroll(scroll) end
-    self.Host = scroll
-    self.MainIndex = m
-    self.SubIndex = j
-    return true
-end
+PublishHost()
+print(">>> [PremiumUI] Host published: shared/_G/getgenv PremiumUI ready, BridgeProtocol=2")
 
 return Lib
