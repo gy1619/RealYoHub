@@ -1,7 +1,7 @@
--- PremiumUI.lua
--- PremiumUI Standalone UI Library + GameBridge Takeover Protocol V3.2
+-- PremiumUI.lua (Astool.lua)
+-- PremiumUI Standalone UI Library + GameBridge Takeover Protocol V3.3 (Final Clean)
 local Lib = {
-    Version = "3.2.0",
+    Version = "3.3.0",
     Brand = "PremiumUI",
     BridgeProtocol = 2,
     IsPremiumUI = true,
@@ -40,7 +40,7 @@ local function Create(class, props, parent)
 end
 Lib.Create = Create
 
--- ★ 关键修复：AddCorner 必须在 Toast 之前定义
+-- ★ 关键修复：AddCorner 必须在最前面定义
 local function AddCorner(parent, r) return Create("UICorner", { CornerRadius = UDim.new(0, r) }, parent) end
 Lib.AddCorner = AddCorner
 
@@ -52,6 +52,7 @@ local COL = {
 Lib.COL = COL
 
 local currentLang = "en"
+-- ★ 关键修复：清理了所有 key 里的脏空格
 local I18N = {
     ["首頁設置"]="Home",["繪制面板"]="ESP",["通用功能"]="Misc",["腳本中心"]="Scripts",
     ["公告相關"]="Info",["其他相關"]="Other",["配置相關"]="Configs",["界面相關"]="Appearance",
@@ -635,10 +636,10 @@ Lib.AP = AP
 
 local ORIG = { Comp = Color3.fromRGB(255, 255, 255), Text = Color3.fromRGB(70, 70, 70), Dim = Color3.fromRGB(110, 110, 110), Accent = Color3.fromRGB(215, 60, 60) }
 local Themes = {
-    ["經典"] = { Panel = Color3.fromRGB(255,255,255), PanelT = 0.45, Comp = Color3.fromRGB(255,255,255), CompT = 0.35, Text = Color3.fromRGB(70,70,70), Dim = Color3.fromRGB(110,110,110), Accent = Color3.fromRGB(215,60,60), Stroke = Color3.fromRGB(160,160,160), BorderRainbow = true, Border = Color3.fromRGB(215,60,60) },
-    ["深藍"] = { Panel = Color3.fromRGB(16,24,45), PanelT = 0.1, Comp = Color3.fromRGB(45,70,120), CompT = 0.15, Text = Color3.fromRGB(215,230,255), Dim = Color3.fromRGB(130,160,200), Accent = Color3.fromRGB(70,150,255), Stroke = Color3.fromRGB(90,120,170), BorderRainbow = false, Border = Color3.fromRGB(70,150,255) },
-    ["賽博"] = { Panel = Color3.fromRGB(12,12,18), PanelT = 0.1, Comp = Color3.fromRGB(30,40,45), CompT = 0.15, Text = Color3.fromRGB(200,255,240), Dim = Color3.fromRGB(110,160,150), Accent = Color3.fromRGB(0,255,200), Stroke = Color3.fromRGB(0,180,150), BorderRainbow = false, Border = Color3.fromRGB(0,255,200) },
-    ["吸血"] = { Panel = Color3.fromRGB(28,12,18), PanelT = 0.1, Comp = Color3.fromRGB(60,25,35), CompT = 0.15, Text = Color3.fromRGB(255,225,230), Dim = Color3.fromRGB(190,120,130), Accent = Color3.fromRGB(230,45,70), Stroke = Color3.fromRGB(180,60,80), BorderRainbow = false, Border = Color3.fromRGB(230,45,70) },
+    ["Classic"] = { Panel = Color3.fromRGB(255,255,255), PanelT = 0.45, Comp = Color3.fromRGB(255,255,255), CompT = 0.35, Text = Color3.fromRGB(70,70,70), Dim = Color3.fromRGB(110,110,110), Accent = Color3.fromRGB(215,60,60), Stroke = Color3.fromRGB(160,160,160), BorderRainbow = true, Border = Color3.fromRGB(215,60,60) },
+    ["DeepBlue"] = { Panel = Color3.fromRGB(16,24,45), PanelT = 0.1, Comp = Color3.fromRGB(45,70,120), CompT = 0.15, Text = Color3.fromRGB(215,230,255), Dim = Color3.fromRGB(130,160,200), Accent = Color3.fromRGB(70,150,255), Stroke = Color3.fromRGB(90,120,170), BorderRainbow = false, Border = Color3.fromRGB(70,150,255) },
+    ["Cyber"] = { Panel = Color3.fromRGB(12,12,18), PanelT = 0.1, Comp = Color3.fromRGB(30,40,45), CompT = 0.15, Text = Color3.fromRGB(200,255,240), Dim = Color3.fromRGB(110,160,150), Accent = Color3.fromRGB(0,255,200), Stroke = Color3.fromRGB(0,180,150), BorderRainbow = false, Border = Color3.fromRGB(0,255,200) },
+    ["Vampire"] = { Panel = Color3.fromRGB(28,12,18), PanelT = 0.1, Comp = Color3.fromRGB(60,25,35), CompT = 0.15, Text = Color3.fromRGB(255,225,230), Dim = Color3.fromRGB(190,120,130), Accent = Color3.fromRGB(230,45,70), Stroke = Color3.fromRGB(180,60,80), BorderRainbow = false, Border = Color3.fromRGB(230,45,70) },
 }
 
 local function TagObj(d)
@@ -1034,18 +1035,22 @@ function Lib:Initialize(opts)
     self.ApplyTheme = ApplyTheme
     self.SetTargetColor = SetTargetColor
     self.ApplyFont = ApplyFont
-    self.GetScroll = function(_, m, j) 
-    if pages[m] and pages[m][j] then 
-        return pages[m][j]:FindFirstChildOfClass("ScrollingFrame") 
-    end 
-    return nil 
-end
+    
+    -- ★ 关键修复：GetScroll 定义为普通函数，避免冒号调用参数错位
+    self.GetScroll = function(m, j) 
+        if pages[m] and pages[m][j] then 
+            return pages[m][j]:FindFirstChildOfClass("ScrollingFrame") 
+        end 
+        return nil 
+    end
 
     self.Initialized = true
     return self
 end
 
---- GameBridge Protocol V3 (Takeover) - 最终防御版
+-------------------------------------------------
+-- GameBridge Protocol V3 (Takeover) - 最终防御版
+-------------------------------------------------
 local function FindPageIndices(category, sub)
     -- 强制去空格
     category = tostring(category):gsub("%s+", "")
@@ -1073,7 +1078,7 @@ local BridgeMeta = {}
 BridgeMeta.__index = BridgeMeta
 
 function BridgeMeta:UsePageIndex(m, j, mode)
-    local scroll = self.UI:GetScroll(m, j)
+    local scroll = self.UI.GetScroll(m, j) -- ★ 关键修复：用点号调用
     if not scroll then return false, "page_not_ready" end
     if mode ~= "Append" then
         for _, c in ipairs(scroll:GetChildren()) do
@@ -1100,7 +1105,7 @@ function BridgeMeta:Grid()
 end
 
 function BridgeMeta:ClearPage()
-    local scroll = self.UI:GetScroll(self.MainIndex, self.SubIndex)
+    local scroll = self.UI.GetScroll(self.MainIndex, self.SubIndex)
     if scroll then
         for _, c in ipairs(scroll:GetChildren()) do
             if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
@@ -1162,4 +1167,46 @@ function Lib:RenameSub(m, j, newName)
     end
     return false
 end
+
+function Lib:RequestGameBridge(payload)
+    payload = payload or {}
+    if payload.Brand ~= self.Brand then return false, "brand_mismatch" end
+    if payload.Protocol and payload.Protocol ~= self.BridgeProtocol then return false, "protocol_mismatch" end
+    if not self.Initialized then return false, "ui_not_initialized" end
+
+    local category = tostring(payload.Category or "腳本中心"):gsub("%s+", "")
+    local sub = tostring(payload.Sub or "自家腳本"):gsub("%s+", "")
+    
+    local m, j = FindPageIndices(category, sub)
+    if not m or not j then return false, "page_not_found: " .. category .. "/" .. sub end
+    
+    local scroll = self.GetScroll(m, j) -- ★ 关键修复：用点号调用
+    if not scroll then return false, "page_not_ready: " .. m .. "," .. j end
+
+    if payload.Mode ~= "Append" then
+        for _, c in ipairs(scroll:GetChildren()) do
+            if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
+        end
+    end
+
+    local bridge = setmetatable({
+        UI = self, Name = payload.Name or "GameScript", Active = true,
+        Protocol = self.BridgeProtocol, Host = scroll, MainIndex = m, SubIndex = j,
+    }, BridgeMeta)
+
+    if payload.Focus then bridge:Focus() end
+    return true, bridge
+end
+
+-------------------------------------------------
+-- Host Publish (秒刷发布)
+-------------------------------------------------
+local function PublishHost()
+    pcall(function() shared.PremiumUI = Lib end)
+    pcall(function() _G.PremiumUI = Lib end)
+    pcall(function() if getgenv then getgenv().PremiumUI = Lib end end)
+end
+PublishHost()
+print(">>> [PremiumUI] Host published: shared/_G/getgenv PremiumUI ready, BridgeProtocol=2")
+
 return Lib
