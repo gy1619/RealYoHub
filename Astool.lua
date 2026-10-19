@@ -1051,9 +1051,23 @@ function Lib:Initialize(opts)
     self.SetTargetColor = SetTargetColor
     self.ApplyFont = ApplyFont
     self.GetScroll = function(m, j)
-        if pages[m] and pages[m][j] then return pages[m][j]:FindFirstChildOfClass("ScrollingFrame") end
-        return nil
+    local pg = pages[m] and pages[m][j]
+    if not pg then return nil end
+    local sc = pg:FindFirstChildOfClass("ScrollingFrame")
+    if not sc then
+        warn(("[RealYoUI] GetScroll: pages[%d][%d] lost its scroll, auto-recreate"):format(m, j))
+        sc = Create("ScrollingFrame", {
+            Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1,
+            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            ScrollBarThickness = math.max(2, S(3)),
+            ScrollBarImageColor3 = Color3.fromRGB(120, 120, 120),
+            Parent = pg,
+        })
+        Create("UIListLayout", { FillDirection = Enum.FillDirection.Vertical, Padding = UDim.new(0, S(8)) }, sc)
+        Create("UIPadding", { PaddingTop = UDim.new(0, S(10)), PaddingLeft = UDim.new(0, S(6)), PaddingRight = UDim.new(0, S(6)), PaddingBottom = UDim.new(0, S(10)) }, sc)
     end
+    return sc
+end
     self.Initialized = true
     return self
 end
