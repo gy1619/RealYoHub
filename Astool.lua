@@ -8,6 +8,23 @@ local Lib = {
     Initialized = false,
 }
 
+local CFG_DIR = "RealYo_Configs"
+local AUTO_FILE = CFG_DIR .. "/autoload.json"
+
+local function FileSupport()
+    return type(writefile) == "function"
+        and type(readfile) == "function"
+        and type(isfile) == "function"
+end
+
+local function EnsureFolder()
+    pcall(function()
+        if type(makefolder) == "function" and not isfolder(CFG_DIR) then
+            makefolder(CFG_DIR)
+        end
+    end)
+end
+
 -- ✅ 核心：Tab 优先级协议
 local TabDefaultPriorities = { ["Info"] = 100, ["ESP"] = 80, ["FE"] = 60, ["ScriptHub"] = 10 }
 local CurrentTabPriorities = { 100, 80, 60, 10 }
@@ -980,7 +997,7 @@ function Lib:Initialize(opts)
     if self.Initialized then return self end
     opts = opts or {}
     ScreenGui = Create("ScreenGui", {
-        Name = "RealYo_SZE" .. math.random(10000, 99999), ResetOnSpawn = false,
+        Name = "RealYo_SZE" .. tostring(math.random(10000, 99999)), ResetOnSpawn = false,
         IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     })
     ScreenGui.Parent = (okCore and CoreGuiService) or LocalPlayer:WaitForChild("PlayerGui")
@@ -1133,10 +1150,11 @@ function Lib:Initialize(opts)
         return sc
     end
     
-    -- ✅ 自动加载 autosave.json
-    if type(isfile) == "function" and isfile(CFG_DIR .. "/autosave.json") then
+        -- ✅ 自动加载 autosave.json
+    local targetCFG = CFG_DIR or "RealYo_Configs"
+    if type(isfile) == "function" and isfile(targetCFG .. "/autosave.json") then
         task.delay(0.2, function()
-            local ok, raw = pcall(readfile, CFG_DIR .. "/autosave.json")
+            local ok, raw = pcall(readfile, targetCFG .. "/autosave.json")
             if ok and raw then
                 local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
                 if ok2 and type(data) == "table" then
