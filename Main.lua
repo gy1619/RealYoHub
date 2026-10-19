@@ -1,17 +1,106 @@
 -- Main Script.lua
-local LIB_URL = "https://raw.githubusercontent.com/gy1619/RealYoHub/refs/heads/main/Astool.lua?t=" .. os.time()
-local UI
-do
-    if shared and shared.RealYoUI then UI = shared.RealYoUI end
-    if not UI then
-        local ok, ret = pcall(function() return loadstring(game:HttpGet(LIB_URL))() end)
-        if ok and type(ret) == "table" then UI = ret end
+local LIB_URLS = {
+    "https://raw.githubusercontent.com/gy1619/RealYoHub/refs/heads/main/Astool.lua?t=" .. tostring(os.time()),
+    "https://raw.githubusercontent.com/gy1619/RealYoHub/main/Astool.lua?t=" .. tostring(os.time()),
+}
+
+local function PickRealYoUI()
+    local candidates = {}
+
+    if shared and shared.RealYoUI then
+        table.insert(candidates, shared.RealYoUI)
     end
-    if not UI and _G and _G.RealYoUI then UI = _G.RealYoUI end
+
+    local genvOK, g = pcall(function()
+        if getgenv then
+            return getgenv()
+        end
+        return nil
+    end)
+
+    if genvOK and g and g.RealYoUI then
+        table.insert(candidates, g.RealYoUI)
+    end
+
+    if _G and _G.RealYoUI then
+        table.insert(candidates, _G.RealYoUI)
+    end
+
+    for _, ui in ipairs(candidates) do
+        if type(ui) == "table" and ui.IsRealYoUI == true and type(ui.Initialize) == "function" then
+            return ui
+        end
+    end
+
+    return nil
 end
-if not UI or not UI.IsRealYoUI then
-    warn("[RealYoUI] UI library load failed.")
-    return
+
+local function HttpGetText(url)
+    local ok, body = pcall(function()
+        return game:HttpGet(url)
+    end)
+
+    if ok and type(body) == "string" and body ~= "" then
+        return body
+    end
+
+    local req = request or http_request or (syn and syn.request)
+    if type(req) == "function" then
+        local res = req({
+            Url = url,
+            Method = "GET",
+        })
+
+        if type(res) == "table" and type(res.Body) == "string" and res.Body ~= "" then
+            return res.Body
+        end
+    end
+
+    error(body or "HttpGet failed")
+end
+
+local UI = PickRealYoUI()
+
+if not UI then
+    local lastError = "no published RealYoUI host"
+
+    for _, url in ipairs(LIB_URLS) do
+        local ok, ret = pcall(function()
+            local source = HttpGetText(url)
+
+            if type(loadstring) ~= "function" then
+                error("loadstring unavailable")
+            end
+
+            local fn = loadstring(source)
+            if type(fn) ~= "function" then
+                error("loadstring compile failed")
+            end
+
+            return fn()
+        end)
+
+        if ok then
+            UI = PickRealYoUI()
+
+            if not UI and type(ret) == "table" then
+                UI = ret
+            end
+
+            if UI then
+                break
+            end
+
+            lastError = "script executed but UI table not found"
+        else
+            lastError = tostring(ret)
+        end
+    end
+
+    if not UI or UI.IsRealYoUI ~= true or type(UI.Initialize) ~= "function" then
+        warn("[RealYoUI] UI library load failed. Detail: " .. tostring(lastError))
+        return
+    end
 end
 
 -- ✅ 核心：由宿主定义 Tab 结构和优先级
@@ -19,10 +108,10 @@ UI:Initialize({
     Title = "RealYo UI",
     Subtitle = "SZE",
     Tabs = {
-        {Name = "Info", Priority = 100},      -- 最高优先级 (配置/主题)
-        {Name = "ESP", Priority = 80},        -- 高优先级
-        {Name = "FE", Priority = 60},         -- 中优先级
-        {Name = "ScriptHub", Priority = 10}   -- 最低优先级 (最容易被顶替)
+        {Name = "Info", Priority = 100},
+        {Name = "ESP", Priority = 80},
+        {Name = "FE", Priority = 60},
+        {Name = "ScriptHub", Priority = 10}
     },
 })
 
