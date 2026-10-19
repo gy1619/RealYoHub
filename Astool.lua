@@ -11,9 +11,22 @@ local Lib = {
 local TabDefaultPriorities = { ["Info"] = 100, ["ESP"] = 80, ["FE"] = 60, ["ScriptHub"] = 10 }
 local CurrentTabPriorities = { 100, 80, 60, 10 } -- 对应 Index 1, 2, 3, 4
 -- ✅ 新增：偷梁换柱核心函数 (将高优先级 Tab 的内容移动到最低优先级 Tab)
+-- ✅ 核心：偷梁换柱函数 (修改版：移动前先清空目标位置)
 function Lib:DisplaceTab(highIndex, lowIndex)
     if highIndex == lowIndex then return end
-    -- 1. 移动 GUI 元素 (遍历 4 个子页面)
+    
+    -- ✅ 新增：先清空低优先级 Tab (lowIndex/ScriptHub) 的内容，防止旧脚本残留
+    for subIdx = 1, 4 do
+        local dstScroll = self.GetScroll(lowIndex, subIdx)
+        if dstScroll then
+            for _, child in ipairs(dstScroll:GetChildren()) do
+                if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then child:Destroy() end
+            end
+            self:ClearFlowCache(dstScroll)
+        end
+    end
+
+    -- 1. 移动 GUI 元素 (把 Info 内容移到 ScriptHub)
     for subIdx = 1, 4 do
         local srcScroll = self.GetScroll(highIndex, subIdx)
         local dstScroll = self.GetScroll(lowIndex, subIdx)
@@ -27,25 +40,27 @@ function Lib:DisplaceTab(highIndex, lowIndex)
             self:ClearFlowCache(dstScroll)
         end
     end
-    -- 2. 更新名称和路由表 (把高优先级的名字给低优先级，因为内容移过去了)
-    local highName = self._mainNames[highIndex]
-    if self._sideButtons and self._sideButtons[lowIndex] then
-        self._sideButtons[lowIndex].Text = highName
+    
+    -- 2. 交换名称
+    local tempName = self._mainNames[highIndex]
+    self._mainNames[highIndex] = self._mainNames[lowIndex]
+    self._mainNames[lowIndex] = tempName
+    if self._sideButtons and self._sideButtons[lowIndex] then self._sideButtons[lowIndex].Text = tempName end
+    
+    -- 3. 交换子菜单
+    if self._subNameSets and self._subNameSets[highIndex] and self._subNameSets[lowIndex] then
+        local tempSubs = self._subNameSets[highIndex]
+        self._subNameSets[highIndex] = self._subNameSets[lowIndex]
+        self._subNameSets[lowIndex] = tempSubs
     end
-    self._mainNames[lowIndex] = highName -- 更新内部名称记录
-    if self._subNameSets[highIndex] and self._subNameSets[lowIndex] then
-        for k, v in pairs(self._subNameSets[highIndex]) do
-            self._subNameSets[lowIndex][k] = v
-        end
-    end
-    -- 3. 交换优先级记录
-    local highPri = CurrentTabPriorities[highIndex]
-    CurrentTabPriorities[lowIndex] = highPri
-    -- highIndex 的优先级稍后由游戏脚本接管时重新设定
-    -- 4. 刷新 UI (如果当前正好在 lowIndex 页面)
-    if self._refreshTopNames and self._getCurrentMain and self._getCurrentMain() == lowIndex then
-        self._refreshTopNames(lowIndex)
-    end
+    
+    -- 4. 交换优先级
+    local tempPri = self._tabPriorities[highIndex]
+    self._tabPriorities[highIndex] = self._tabPriorities[lowIndex]
+    self._tabPriorities[lowIndex] = tempPri
+    
+    -- 5. 刷新 UI
+    if self._refreshTopNames and self._getCurrentMain and self._getCurrentMain() == lowIndex then self._refreshTopNames(lowIndex) end
 end
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -1071,9 +1086,24 @@ function Lib:RequestGameBridge(payload)
     -- 更新目标位置的优先级为游戏脚本的优先级
     CurrentTabPriorities[targetIndex] = gamePriority
     -- 后续标准接管流程
+    -- 后续标准接管流程
     local scroll = self.GetScroll(targetIndex, j)
     if not scroll then return false, "page_not_ready: " .. targetIndex .. ", " .. j end
-    if payload.Mode ~= "Append" then
+    
+    -- ✅ 修复：如果是 Replace 模式，强制清空该主菜单 (targetIndex) 下的所有 4 个子页面
+    -- 这样可以确保原本 Info 页的 Config, Theme 等组件全部被丢弃，不会残留
+    if payload.Mode == "Replace" then
+        for clearJ = 1, 4 do
+            local clearScroll = self.GetScroll(targetIndex, clearJ)
+            if clearScroll then
+                for _, c in ipairs(clearScroll:GetChildren()) do
+                    if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
+                end
+                self:ClearFlowCache(clearScroll)
+            end
+        end
+    elseif payload.Mode ~= "Append" then
+        -- 如果是其他非 Append 模式，只清空当前页
         for _, c in ipairs(scroll:GetChildren()) do
             if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
         end
