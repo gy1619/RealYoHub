@@ -562,26 +562,23 @@ local function MakeToggle(parent, text, default, cb, register, group)
 end
 
 local function MakeSlider(parent, text, min, max, default, cb, group)
-    local row = AsFlow(parent).Add(S(252), S(30))
+    -- 动态计算文字宽度，最少 92，如果太长就自己变大
+    local textW = math.max(S(92), EstW(text, TS(11)) + S(10))
+    local rowW = math.max(S(252), textW + S(160))
+    local row = AsFlow(parent).Add(rowW, S(30))
+    
     local desc = Create("TextLabel", {
-        Size = UDim2.fromOffset(S(92), S(16)), Position = UDim2.new(0, 0, 0.5, -S(8)), BackgroundTransparency = 1,
+        Size = UDim2.fromOffset(textW, S(16)), Position = UDim2.new(0, 0, 0.5, -S(8)), BackgroundTransparency = 1,
         Text = text, TextColor3 = COL.TextDim, TextSize = TS(11), Font = Enum.Font.Gotham,
-        TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = row,
+        TextXAlignment = Enum.TextXAlignment.Left, Parent = row,
     })
     local track = Create("Frame", {
-        Size = UDim2.fromOffset(S(120), S(8)), Position = UDim2.new(0, S(96), 0.5, -S(4)),
+        Size = UDim2.fromOffset(S(120), S(8)), Position = UDim2.new(0, textW + S(4), 0.5, -S(4)),
         BackgroundColor3 = Color3.fromRGB(120, 120, 120), BackgroundTransparency = 0.3, Parent = row,
     })
-    AddCorner(track, S(4))
-    local fill = Create("Frame", { BackgroundColor3 = COL.Red, Parent = track })
-    AddCorner(fill, S(4))
-    fill:SetAttribute("accentbg", true)
-    local knob = Create("Frame", {
-        Size = UDim2.fromOffset(S(12), S(12)), BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = 2, Parent = track,
-    })
-    AddCorner(knob, S(6))
+    -- ... 中间不动 ...
     local valLabel = Create("TextLabel", {
-        Size = UDim2.fromOffset(S(34), S(16)), Position = UDim2.new(0, S(218), 0.5, -S(8)), BackgroundTransparency = 1,
+        Size = UDim2.fromOffset(S(34), S(16)), Position = UDim2.new(0, textW + S(126), 0.5, -S(8)), BackgroundTransparency = 1,
         TextColor3 = COL.TextDark, TextSize = TS(11), Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Right, Parent = row,
     })
