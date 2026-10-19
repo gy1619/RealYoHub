@@ -65,25 +65,21 @@ if AUTO_ACCEPT and HostUI then
             Brand = GAME.Brand,
             Protocol = HostUI.BridgeProtocol or 2,
             Name = GAME.Name,
-            
-            -- ✅ 修复：严格匹配，去掉所有多余空格
-            RequestedCategory = "Info",  -- 匹配 "Info"
-            Priority = 90,               -- 优先级 90 (Info是100, ScriptHub是10)
-            Category = "Info",           
-            Sub = "Annc",                -- 匹配 "Annc" (UI库里是 "Annc "，gsub后会匹配)
+            RequestedCategory = "Info",
+            Priority = 90,
+            Category = "Info",
+            Sub = "Annc",
             Mode = "Replace",
-            Focus = true,                -- 自动聚焦
+            Focus = false,
         })
     end)
-    
     if ok and success == true and type(bridgeOrErr) == "table" then
         Runtime.Mode = "Host"
         Runtime.Bridge = bridgeOrErr
         Runtime.Host = HostUI
         print("[RealYoHub] bridge obtained, Mode=Host")
     else
-        -- 打印详细错误方便调试
-        warn("[RealYoHub][ERR] RequestGameBridge Failed: " .. tostring(success) .. " | " .. tostring(bridgeOrErr))
+        warn("[RealYoHub][ERR] RequestGameBridge: " .. tostring(ok and bridgeOrErr or success))
     end
 end
 
@@ -108,26 +104,126 @@ local function BridgeAdapter(bridge)
     function A:Section(t) return self._b:Section(t) end
     function A:Label(t) return self._b:Label(t) end
     function A:Button(t, cb) return self._b:Button(t, cb) end
-    function A:Toggle(t, def, cb) return self._b:Toggle(t, def, cb) end
-    function A:Slider(t, min, max, def, cb) return self._b:Slider(t, min, max, def, cb) end
+    function A:Toggle(t, def, cb, group) return self._b:Toggle(t, def, cb, { Group = group }) end
+    function A:Slider(t, min, max, def, cb, group) return self._b:Slider(t, min, max, def, cb, { Group = group }) end
     function A:Input(t, placeholder, cb)
         local box = self._b:TextBox(placeholder, "")
         if box then box:GetPropertyChangedSignal("Text"):Connect(function() cb(box.Text) end) end
         return box
     end
+    function A:Dropdown(t, opts, def, cb) return self._b:Dropdown(t, opts, def, cb) end
     return A
 end
 
-local function WindAdapter(tab)
-    local A = { _t = tab }
-    function A:Section(t) if self._t.Section then pcall(function() self._t:Section({ Title = t }) end) end end
-    function A:Label(t) if self._t.Label then pcall(function() self._t:Label({ Title = t }) end) end end
-    function A:Button(t, cb) self._t:Button({ Title = t, Callback = cb }) end
-    function A:Toggle(t, def, cb) self._t:Toggle({ Title = t, Default = def, Callback = cb }) end
-    function A:Slider(t, min, max, def, cb) if self._t.Slider then self._t:Slider({ Title = t, Min = min, Max = max, Default = def, Callback = cb }) end end
-    function A:Input(t, placeholder, cb) self._t:Input({ Title = t, Placeholder = placeholder, Callback = cb }) end
-    return A
+-- ✅✅✅ 智能 Gun Modded 重构 ✅✅✅
+local function BuildGunModded(A)
+    local bridge = A._b
+    local host = bridge.Host -- 获取当前的 ScrollingFrame
+    
+    -- 1. 扫描武器函数
+    local function scanWeapons()
+        local weapons = {}
+        local function checkContainer(container)
+            if not container then return end
+            for _, tool in pairs(container:GetChildren()) do
+                if tool:IsA("Tool") and tool:FindFirstChild("Setting") then
+                    local ok, setting = pcall(require, tool.Setting)
+                    if ok and type(setting) == "table" then
+                        weapons[tool.Name] = setting
+                    end
+                end
+            end
+        end
+        checkContainer(LocalPlayer.Backpack)
+        checkContainer(LocalPlayer.Character)
+        return weapons
+    end
+
+    -- 2. 动态渲染属性面板
+    local function renderProperties(weaponName, setting)
+        -- 清空旧的动态属性 (标记为 "DynProp")
+        for _, child in ipairs(host:GetChildren()) do
+            if child:GetAttribute("DynProp") then child:Destroy() end
+        end
+        
+        if not setting then
+            A:Section("No properties found")
+            local sec = host:FindFirstChildWhichIsA("TextLabel") -- 简单处理，实际应更精确
+            -- 这里我们直接创建 TextLabel 并标记
+            local lbl = Create("TextLabel", {
+                Size = UDim2.new(1, 0, 0, 20), BackgroundTransparency = 1,
+                Text = "Select a weapon to view properties", TextColor3 = Color3.fromRGB(150, 150, 150),
+                TextSize = 12, Font = Enum.Font.Gotham, Parent = host
+            })
+            lbl:SetAttribute("DynProp", true)
+            return
+        end
+
+        A:Section("Properties for " .. weaponName)
+        local secLbl = host:FindFirstChildWhichIsA("TextLabel") -- 获取刚创建的 Section
+        if secLbl then secLbl:SetAttribute("DynProp", true) end
+
+        -- 遍历 Setting 表
+        for key, value in pairs(setting) do
+            local typeName = type(value)
+            if typeName == "number" then
+                -- 创建 Slider
+                local sliderHost = Create("Frame", {
+                    Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1, Parent = host
+                })
+                sliderHost:SetAttribute("DynProp", true)
+                
+                -- 这里简化处理，直接调用 MakeSlider 的逻辑，但需要适配 FlowOf
+                -- 为了稳定，我们使用 Bridge 的标准方法，但手动标记
+                local row = Create("Frame", { Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1, Parent = host })
+                row:SetAttribute("DynProp", true)
+                
+                -- 由于 MakeSlider 内部使用了 FlowOf，它会自动布局。我们只需调用它。
+                -- 注意：MakeSlider 会注册到 Config，我们传入 group = weaponName
+                A:Slider(key, 0, 1000000, value, function(v)
+                    setting[key] = v
+                end, weaponName)
+                
+            elseif typeName == "boolean" then
+                A:Toggle(key, value, function(v)
+                    setting[key] = v
+                end, weaponName)
+            end
+        end
+    end
+
+    -- 3. 构建 UI
+    A:Section("Weapon Scanner")
+    A:Button("Refresh Weapons", function()
+        local weapons = scanWeapons()
+        local names = {}
+        for name, _ in pairs(weapons) do table.insert(names, name) end
+        if #names == 0 then names = {"No weapons found"} end
+        
+        -- 更新 Dropdown (这里简化，实际应更新 Dropdown 的选项)
+        -- 由于 Dropdown 更新较复杂，我们直接重新渲染整个页面或提示用户
+        Notify("Scanner", "Found " .. #names .. " weapons. Reload page to apply.", 3, "info")
+    end)
+
+    A:Section("Select Weapon")
+    local weapons = scanWeapons()
+    local names = {}
+    for name, _ in pairs(weapons) do table.insert(names, name) end
+    if #names == 0 then names = {"No weapons found"} end
+
+    A:Dropdown("Choose Weapon", names, names[1] or "No weapons found", function(selected)
+        if weapons[selected] then
+            renderProperties(selected, weapons[selected])
+        end
+    end)
+
+    A:Section("Properties")
+    -- 默认渲染第一个武器
+    if names[1] and weapons[names[1]] then
+        renderProperties(names[1], weapons[names[1]])
+    end
 end
+-- ✅✅✅ Gun Modded 重构结束 ✅✅✅
 
 local function BuildArea51(A)
     local speedHackConnection = nil
@@ -370,61 +466,6 @@ local function BuildArea51(A)
     end)
 end
 
-local function BuildGunModded(A)
-    A:Button("Modded ALL GUN(CAN'T UNDO)", function()
-        if _G.AllGunMod then return end
-        _G.AllGunMod = true
-        task.spawn(function()
-            while _G.AllGunMod do
-                for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
-                    if tool:IsA("Tool") and tool:FindFirstChild("Setting") then
-                        pcall(function()
-                            local s = require(tool.Setting)
-                            s.BaseDamage = 999999 s.FireRate = 0.01 s.AmmoPerClip = 99999
-                            s.Spread = 0 s.Auto = true s.Radius = 50 s.CameraShakingEnabled = false
-                        end)
-                    end
-                end
-                if LocalPlayer.Character then
-                    for _, tool in pairs(LocalPlayer.Character:GetChildren()) do
-                        if tool:IsA("Tool") and tool:FindFirstChild("Setting") then
-                            pcall(function()
-                                local s = require(tool.Setting)
-                                s.BaseDamage = 999999 s.FireRate = 0.01 s.AmmoPerClip = 99999
-                                s.Spread = 0 s.Auto = true s.CameraShakingEnabled = false
-                            end)
-                        end
-                    end
-                end
-                task.wait(0.2)
-            end
-        end)
-    end)
-    
-    local GunMods = { BaseDamage = 999999, FireRate = 0.01, AmmoPerClip = 99999, Spread = 0, Auto = true, CameraShakingEnabled = false }
-    local ActiveGunMods = {}
-    local function ApplyGunMod(name)
-        if ActiveGunMods[name] then return end
-        ActiveGunMods[name] = true
-        task.spawn(function()
-            while ActiveGunMods[name] and task.wait(0.3) do
-                local tool = LocalPlayer.Backpack:FindFirstChild(name) or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(name))
-                if tool and tool:FindFirstChild("Setting") then
-                    local s = require(tool.Setting)
-                    for k, v in pairs(GunMods) do s[k] = v end
-                end
-            end
-        end)
-    end
-    
-    local guns = { "Beretta 87", "AK47", "Desert Eagle", "Golden Eagle", "M16A4", "UZI", "LX1", "LX2", "LX3", "RGB", "Reaper's Scythe", "Water Gun", "Red Missile Launcher", "Ice Crossbow", "Mech O' Matic" }
-    for _, g in ipairs(guns) do
-        A:Toggle(g .. " Modded", false, function(v)
-            if v then ApplyGunMod(g); Notify("Gun", g .. " Modded", 4, "zap") else ActiveGunMods[g] = false end
-        end)
-    end
-end
-
 local function BuildTeleport(A)
     local places = {
         ["Crafting Room"] = Vector3.new(953.97, 1060, 713.44), ["Shop"] = Vector3.new(588.74, 1151, 665.43),
@@ -522,45 +563,5 @@ if Runtime.Mode == "Host" then
     SafeCall("Focus", function() bridge:Focus() end)
     Notify("RealYoHub", "Handshake OK - hosted by RealYoUI", 6, "crown")
 else
-    local okWind, WindUI = pcall(function() return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))() end)
-    if not okWind or type(WindUI) ~= "table" then warn("[RealYoHub][ERR] WindUI load failed: " .. tostring(WindUI)); return end
-    local createUI
-    local function LoadScript() createUI() end
-    
-    WindUI:Popup({
-        Title = "RealYoHub V1.2.4", IconThemed = true,
-        Content = "Welcome " .. LocalPlayer.Name .. "\nArea 51 All ready",
-        Buttons = {
-            { Title = "Leave", Variant = "Secondary", Callback = function() end },
-            { Title = "Execute", Icon = "zap", Variant = "Primary", Callback = function() LoadScript() end },
-        },
-    })
-    
-    createUI = function()
-        local Window = WindUI:CreateWindow({
-            Title = "RealYoHub V1.2.4", Icon = "palette",
-            Author = "Welcome " .. LocalPlayer.Name .. "\nMade by SZELON0",
-            Folder = "RealYo", Size = UDim2.fromOffset(550, 380), Theme = "Light",
-            User = { Enabled = true, Anonymous = true }, SideBarWidth = 200, HideSearchBar = false,
-        })
-        Window:Tag({ Title = "51 Area", Color = Color3.fromHex("#00ffff") })
-        Window:EditOpenButton({
-            Title = "RealYoHub", Icon = "crown", CornerRadius = UDim.new(0, 8), StrokeThickness = 3,
-            Color = ColorSequence.new(Color3.fromRGB(255, 255, 0), Color3.fromRGB(255, 165, 0), Color3.fromRGB(255, 0, 0), Color3.fromRGB(139, 0, 0)),
-            Draggable = true,
-        })
-        
-        local Area51Tab = Window:Tab({ Title = "Area 51", Icon = "globe" })
-        local Area51GunTPTab = Window:Tab({ Title = "Gun Modded", Icon = "crosshair" })
-        local Area51TPTab = Window:Tab({ Title = "Teleport", Icon = "map-pin" })
-        local FETab = Window:Tab({ Title = "FE Tools", Icon = "zap" })
-        
-        SafeCall("Wind Build Area51", function() BuildArea51(WindAdapter(Area51Tab)) end)
-        SafeCall("Wind Build GunModded", function() BuildGunModded(WindAdapter(Area51GunTPTab)) end)
-        SafeCall("Wind Build Teleport", function() BuildTeleport(WindAdapter(Area51TPTab)) end)
-        SafeCall("Wind Build FETools", function() BuildFETools(WindAdapter(FETab)) end)
-        
-        Notify("RealYoHub V1.2.4", "Loaded successfully!\nRightControl = Toggle Menu", 8, "crown")
-        Window:AutoSaveConfig(true)
-    end
+    warn("[RealYoHub] WindUI fallback removed. Please execute RealYoUI Host first.")
 end
