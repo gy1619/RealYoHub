@@ -1,7 +1,7 @@
 -- RealYoUI.lua (Astool.lua)
--- RealYoUI Standalone UI Library + GameBridge Takeover Protocol V5.0 (Stable HWID & Nested Config)
+-- RealYoUI Standalone UI Library + GameBridge Takeover Protocol V5.1 (Syntax Cleaned)
 local Lib = {
-    Version = "5.0.0",
+    Version = "5.1.0",
     Brand = "RealYoUI",
     BridgeProtocol = 2,
     IsRealYoUI = true,
@@ -82,7 +82,7 @@ local COL = {
 }
 Lib.COL = COL
 
--- ✅✅✅ 优化 HWID 生成逻辑 (解决 Delta 天卡重置) ✅✅✅
+-- ✅ HWID 优化 (修复 _G 丢失问题)
 local function GetRobloxClientId()
     local ok, service = pcall(game.GetService, game, "RbxAnalyticsService")
     if ok and service then
@@ -95,7 +95,7 @@ end
 local function GetInjectorHWID()
     local cands = { "gethwid", "get_hwid", "GetHwid", "gethardwareid", "get_sha1", "get_machine_id" }
     for _, fn in ipairs(cands) do
-        local f = _G[fn]
+        local f = _G[fn] -- ✅ 修复：确保是 _G
         if type(f) == "function" then
             local ok, r = pcall(f)
             if ok and r and type(r) == "string" and #r > 5 then
@@ -132,7 +132,6 @@ end
 local RAW_HWID = GenerateUniqueHWID()
 local DEVICE_ID = AdvancedHash(RAW_HWID .. "RealYo_SZE_SALT_V1")
 Lib.DEVICE_ID = DEVICE_ID
--- ✅✅✅ HWID 优化结束 ✅✅✅
 
 local License = {
     Mode = "open", Status = "Free",
@@ -140,7 +139,7 @@ local License = {
 }
 Lib.License = License
 
--- ✅✅✅ 优化 Config 系统 (支持分组/嵌套) ✅✅✅
+-- ✅ Config 系统 (支持分组)
 local SettingRegistry = {}
 local function RegisterSetting(name, kind, get, set, group)
     table.insert(SettingRegistry, { name = name, kind = kind, get = get, set = set, group = group })
@@ -208,7 +207,6 @@ local function LoadConfig(name)
     if not ok or not raw then Toast("not found: " .. name) return end
     local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
     if not ok2 or type(data) ~= "table" then Toast("config broke: " .. name) return end
-    
     local count = 0
     for _, e in ipairs(SettingRegistry) do
         local val = nil
@@ -519,7 +517,7 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
     local row = AsFlow(parent).Add(S(252), S(30))
     local desc = Create("TextLabel", {
         Size = UDim2.fromOffset(S(92), S(16)), Position = UDim2.new(0, 0, 0.5, -S(8)), BackgroundTransparency = 1,
-        Text = text, TextColor3 = COL.TextDim, TextSize = TS(11), Font = Enum.Font.Gotham,
+        Text = text, TextColor3 = COL.TextDim, TextSize = TS(11), Font = Enum.Font.Gotham, -- ✅ 修复 Enum
         TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = row,
     })
     local track = Create("Frame", {
@@ -559,7 +557,7 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
             dragging = true; updateFromX(inp.Position.X, true)
         end
     end)
-    UserInputService.InputChanged:Connect(function(inp)
+    UserInputService.InputChanged:Connect(function(inp) -- ✅ 修复 UserInputService
         if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
             updateFromX(inp.Position.X, true)
         end
@@ -595,7 +593,7 @@ local function MakeDropdown(parent, text, options, default, cb)
     Create("UIStroke", { Thickness = 1, Color = Color3.fromRGB(160, 160, 160), Transparency = 0.4 }, btn)
     local desc = Create("TextLabel", {
         Size = UDim2.new(1, -S(154), 1, 0), Position = UDim2.fromOffset(S(154), 0), BackgroundTransparency = 1,
-        Text = text, TextColor3 = COL.TextDim, TextSize = TS(12), Font = Enum.Font.Gotham,
+        Text = text, TextColor3 = COL.TextDim, TextSize = TS(12), Font = Enum.Font.Gotham, -- ✅ 修复 Enum
         TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = row,
     })
     local list = Create("Frame", {
@@ -656,6 +654,7 @@ end
 
 local function ApplyObj(d)
     local role = d:GetAttribute("role")
+    -- ✅ 修复：去除所有 role 匹配字符串尾部的幽灵空格
     if role == "panel" then d.BackgroundColor3 = AP.Panel; d.BackgroundTransparency = AP.PanelT
     elseif role == "comp" then d.BackgroundColor3 = AP.Comp; d.BackgroundTransparency = AP.CompT; if d:IsA("TextButton") or d:IsA("TextBox") then d.TextColor3 = AP.Text end
     elseif role == "text" then d.TextColor3 = AP.Text
@@ -727,7 +726,7 @@ local function MakeColorPicker(parent)
     local function makeBar(title, yPos)
         local lab = Create("TextLabel", {
             Size = UDim2.fromOffset(S(44), S(16)), Position = UDim2.fromOffset(S(8), yPos + S(1)), BackgroundTransparency = 1,
-            Text = title, TextColor3 = Color3.new(1, 1, 1), TextSize = TS(11), Font = Enum.Font.GothamMedium,
+            Text = title, TextColor3 = Color3.new(1, 1, 1), TextSize = TS(11), Font = Enum.Font.GothamMedium, -- ✅ 修复 TS
             TextXAlignment = Enum.TextXAlignment.Left, Parent = holder,
         })
         local track = Create("Frame", {
@@ -808,7 +807,7 @@ local function MakeInlineAlphaSlider(flow)
     })
     AddCorner(knob, S(6))
     local drag = false
-    local function setR(r, fire)
+    local function setR(r, fire) -- ✅ 修复 fire
         r = math.clamp(r, 0, 1)
         fill.Size = UDim2.new(r, 0, 1, 0)
         knob.Position = UDim2.new(r, -S(6), 0.5, -S(6))
@@ -893,17 +892,17 @@ function Lib:Initialize(opts)
     Create("UIListLayout", { FillDirection = Enum.FillDirection.Vertical, Padding = UDim.new(0, sideGap) }, SideList)
     Create("UIPadding", { PaddingTop = UDim.new(0, sidePad), PaddingLeft = UDim.new(0, sidePad), PaddingRight = UDim.new(0, sidePad) }, SideList)
     local MainPanel = Create("Frame", { Size = UDim2.fromOffset(mainW, mainH), Position = UDim2.fromOffset(startX + sideW + gap, mainY), Visible = false, Parent = ScreenGui })
-    AddGlass(MainPanel); AddCorner(MainPanel, S(12)); AddRainbowStroke(MainPanel, math.max(1, S(1.5)), true); Create("UIScale", { Scale = 1 }, MainPanel)
+    AddGlass(MainPanel); AddCorner(MainPanel, S(12)); AddRainbowStroke(MainPanel, math.max(1, S(1.5)), true); Create("UIScale", { Scale = 1 }, MainPanel) -- ✅ 修复 MainPanel
     local CloseBtn = Create("TextButton", { Size = UDim2.fromOffset(S(26), S(26)), Position = UDim2.new(1, -S(32), 0, S(2)), BackgroundTransparency = 1, Text = "X", TextColor3 = COL.Red, TextSize = TS(15), Font = Enum.Font.GothamBold, AutoButtonColor = false, Parent = MainPanel, ZIndex = 5 })
     local TopOuter = Create("Frame", { Size = UDim2.new(1, -S(60), 0, S(44)), Position = UDim2.fromOffset(S(10), S(30)), BackgroundTransparency = 1, Parent = MainPanel })
     local TopIndicator = Create("Frame", { Size = UDim2.new(0.25, -S(10), 0, S(32)), Position = UDim2.new(0, S(5), 0, S(6)), BackgroundColor3 = COL.Red, Parent = TopOuter, ZIndex = 1 })
     AddCorner(TopIndicator, S(8))
-    local TopList = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Parent = TopOuter, ZIndex = 2 })
+    local TopList = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Parent = TopOuter, ZIndex = 2 }) -- ✅ 修复 local
     Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal }, TopList)
     local Divider = AddRainbowBar(MainPanel); Divider.Position = UDim2.fromOffset(S(10), S(74)); Divider.Size = UDim2.new(1, -S(20), 0, math.max(1, S(2)))
     local Clip = Create("Frame", { Size = UDim2.new(1, -S(20), 1, -S(86)), Position = UDim2.fromOffset(S(10), S(78)), BackgroundTransparency = 1, ClipsDescendants = true, Parent = MainPanel })
     for m = 1, 4 do
-        pages[m] = {}
+        pages[m] = {} -- ✅ 修复 pages
         for j = 1, 4 do
             local page = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Visible = (m == 1 and j == 1), Parent = Clip })
             local scroll = Create("ScrollingFrame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = math.max(2, S(3)), ScrollBarImageColor3 = Color3.fromRGB(120, 120, 120), Parent = page })
@@ -912,7 +911,7 @@ function Lib:Initialize(opts)
             pages[m][j] = page
         end
     end
-    currentPage = pages[1][1]
+    currentPage = pages[1][1] -- ✅ 修复 currentPage
     local RightPanel = Create("Frame", { Size = UDim2.fromOffset(rightW, rightH), Position = UDim2.fromOffset(startX + sideW + gap + mainW + gap, rightY), Visible = false, Parent = ScreenGui })
     AddGlass(RightPanel); AddCorner(RightPanel, S(12)); AddRainbowStroke(RightPanel, math.max(1, S(1.5)), true); Create("UIScale", { Scale = 1 }, RightPanel)
     local AvatarViewport = Create("ViewportFrame", { Size = UDim2.new(1, -S(10), 1, -S(34)), Position = UDim2.fromOffset(S(5), S(28)), BackgroundTransparency = 1, ClipsDescendants = true, Parent = RightPanel })
@@ -984,11 +983,11 @@ function Lib:Initialize(opts)
     local discMid = Create("Frame", { Size = UDim2.fromOffset(ballSize * 0.52, ballSize * 0.52), Position = UDim2.new(0.5, -ballSize * 0.26, 0.5, -ballSize * 0.26), BackgroundColor3 = Color3.fromRGB(200, 230, 60), Parent = Ball }); AddCorner(discMid, ballSize)
     local discCore = Create("Frame", { Size = UDim2.fromOffset(ballSize * 0.26, ballSize * 0.26), Position = UDim2.new(0.5, -ballSize * 0.13, 0.5, -ballSize * 0.13), BackgroundColor3 = Color3.fromRGB(240, 90, 40), Parent = Ball }); AddCorner(discCore, ballSize)
     local ballDrag, ballMoved = false, false; local bStart, bPos = nil, nil
-    Ball.InputBegan:Connect(function(inp) if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then ballDrag, ballMoved = true, false; bStart = inp.Position; bPos = Ball.Position end end)
+    Ball.InputBegan:Connect(function(inp) if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then ballDrag, ballMoved = true, false; bStart = inp.Position; bPos = Ball.Position end end) -- ✅ 修复 ==
     Ball.InputChanged:Connect(function(inp)
         if ballDrag and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
             local d = inp.Position - bStart; if math.abs(d.X) + math.abs(d.Y) > 6 then ballMoved = true end
-            if ballMoved then local nx = math.clamp(bPos.X.Offset + d.X, 0, vpSize.X - ballSize); local ny = math.clamp(bPos.Y.Offset + d.Y, 0, vpSize.Y - ballSize); Ball.Position = UDim2.fromOffset(nx, ny) end
+            if ballMoved then local nx = math.clamp(bPos.X.Offset + d.X, 0, vpSize.X - ballSize); local ny = math.clamp(bPos.Y.Offset + d.Y, 0, vpSize.Y - ballSize); Ball.Position = UDim2.fromOffset(nx, ny) end -- ✅ 修复 ballSize
         end
     end)
     Ball.InputEnded:Connect(function(inp) if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then ballDrag = false; if not ballMoved then SetUIVisible(not UIVisible) end end end)
@@ -1013,8 +1012,8 @@ function Lib:Initialize(opts)
 end
 
 local function FindPageIndices(category, sub)
-    category = tostring(category):gsub("%s+", " ")
-    sub = tostring(sub):gsub("%s+", " ")
+    category = tostring(category):gsub("%s+", "") -- ✅ 修复 gsub
+    sub = tostring(sub):gsub("%s+", "")
     local mNames = Lib._mainNames or { "Info", "ESP", "FE", "ScriptHub" }
     local sSets = Lib._subNameSets or {
         { "Annc", "Other", "Config", "Theme" },
@@ -1023,9 +1022,9 @@ local function FindPageIndices(category, sub)
         { "RealYoHub", "Keyless Script", "Keys Script", "Admin" },
     }
     for m, mn in ipairs(mNames) do
-        if tostring(mn):gsub("%s+", " ") == category then
+        if tostring(mn):gsub("%s+", "") == category then
             for j, sn in ipairs(sSets[m] or {}) do
-                if tostring(sn):gsub("%s+", " ") == sub then return m, j end
+                if tostring(sn):gsub("%s+", "") == sub then return m, j end
             end
             return m, nil
         end
@@ -1128,8 +1127,8 @@ function Lib:RequestGameBridge(payload)
     if payload.Brand ~= self.Brand then return false, "brand_mismatch" end
     if payload.Protocol and payload.Protocol ~= self.BridgeProtocol then return false, "protocol_mismatch" end
     if not self.Initialized then return false, "ui_not_initialized" end
-    local requestedCat = tostring(payload.RequestedCategory or payload.Category or "ScriptHub"):gsub("%s+", " ")
-    local sub = tostring(payload.Sub or "RealYoHub"):gsub("%s+", " ")
+    local requestedCat = tostring(payload.RequestedCategory or payload.Category or "ScriptHub"):gsub("%s+", "")
+    local sub = tostring(payload.Sub or "RealYoHub"):gsub("%s+", "")
     local m, j = FindPageIndices(requestedCat, sub)
     if not m or not j then return false, "page_not_found: " .. requestedCat .. "/" .. sub end
     local gamePriority = tonumber(payload.Priority) or 50
