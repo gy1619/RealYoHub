@@ -1,102 +1,161 @@
--- Main Script.lua
+-- Main Script.lua (loader v2: 自动修复空格/断词)
 local LIB_URLS = {
     "https://raw.githubusercontent.com/gy1619/RealYoHub/refs/heads/main/Astool.lua?t=" .. tostring(os.time()),
     "https://raw.githubusercontent.com/gy1619/RealYoHub/main/Astool.lua?t=" .. tostring(os.time()),
 }
 
+-- ========== 空格修复引擎 ==========
+local KW = {}
+for _, w in ipairs({
+    "and","break","do","else","elseif","end","false","for","function",
+    "if","in","local","nil","not","or","repeat","return","then","true",
+    "until","while","continue",
+}) do KW[w] = true end
+
+local function TrimStr(s) return (s:match("^%s*(.-)%s*$")) end
+
+local function Tokenize(src)
+    local toks = {}
+    local i, n = 1, #src
+    while i <= n do
+        local ws = src:match("^%s+", i)
+        if ws then
+            toks[#toks+1] = { t = "ws", v = ws }; i = i + #ws
+        elseif src:sub(i, i+1) == "--" then
+            local nl = src:find("\n", i) or (n + 1)
+            toks[#toks+1] = { t = "comment", v = src:sub(i, nl - 1) }; i = nl
+        elseif src:sub(i, i) == '"' or src:sub(i, i) == "'" then
+            local q = src:sub(i, i); local j = i + 1; local buf = {}
+            while j <= n do
+                local ch = src:sub(j, j)
+                if ch == "\\" and j + 1 <= n then
+                    buf[#buf+1] = src:sub(j, j+1); j = j + 2
+                elseif ch == q then j = j + 1; break
+                elseif ch == "\n" then break
+                else buf[#buf+1] = ch; j = j + 1 end
+            end
+            toks[#toks+1] = { t = "string", v = q .. TrimStr(table.concat(buf)) .. q }
+            i = j
+        elseif src:match("^0[xX][%da-fA-F]+", i) then
+            local s = src:match("^0[xX][%da-fA-F]+", i)
+            toks[#toks+1] = { t = "num", v = s }; i = i + #s
+        elseif src:sub(i, i):match("%d") and src:match("^%d+%.?%d*", i) then
+            local s = src:match("^%d+%.?%d*", i)
+            toks[#toks+1] = { t = "num", v = s }; i = i + #s
+        elseif src:match("^%.%d+", i) then
+            local s = src:match("^%.%d+", i)
+            toks[#toks+1] = { t = "num", v = s }; i = i + #s
+        elseif src:match("^[%a_][%w_]*", i) then
+            local s = src:match("^[%a_][%w_]*", i)
+            toks[#toks+1] = { t = KW[s] and "kw" or "ident", v = s }; i = i + #s
+        else
+            toks[#toks+1] = { t = "op", v = src:sub(i, i) }; i = i + 1
+        end
+    end
+    return toks
+end
+
+local MERGE_OPS = { ["="] = true, ["~"] = true, ["<"] = true, [">"] = true, ["."] = true, [".."] = true }
+
+local function RepairSource(src)
+    local toks = Tokenize(src)
+    local out = {}
+    local prev, prevSep = nil, nil
+    for _, tk in ipairs(toks) do
+        if tk.t == "ws" then
+            prevSep = (prevSep or "") .. tk.v
+        elseif tk.t == "comment" then
+            if prevSep then out[#out+1] = { t = "ws", v = prevSep }; prevSep = nil end
+            out[#out+1] = tk
+            prev = { t = "comment", v = "" }
+        else
+            local merged = false
+            if prev and prevSep and not prevSep:find("\n") then
+                if prev.t == "ident" and tk.t == "ident" and not KW[prev.v] and not KW[tk.v] then
+                    prev.v = prev.v .. tk.v
+                    if KW[prev.v] then prev.t = "kw" end
+                    merged = true
+                elseif prev.t == "op" and tk.t == "op" and MERGE_OPS[prev.v] and (tk.v == "=" or tk.v == ".") then
+                    prev.v = prev.v .. tk.v
+                    merged = true
+                end
+            end
+            if not merged then
+                if prevSep then out[#out+1] = { t = "ws", v = prevSep }; prevSep = nil end
+                out[#out+1] = tk
+                prev = tk
+            else
+                prevSep = nil
+            end
+        end
+    end
+    if prevSep then out[#out+1] = { t = "ws", v = prevSep } end
+    local parts = {}
+    for _, t in ipairs(out) do parts[#parts+1] = t.v end
+    return table.concat(parts)
+end
+-- ========== 修复引擎结束 ==========
+
 local function PickRealYoUI()
     local candidates = {}
-
-    if shared and shared.RealYoUI then
-        table.insert(candidates, shared.RealYoUI)
-    end
-
-    local genvOK, g = pcall(function()
-        if getgenv then
-            return getgenv()
-        end
-        return nil
-    end)
-
-    if genvOK and g and g.RealYoUI then
-        table.insert(candidates, g.RealYoUI)
-    end
-
-    if _G and _G.RealYoUI then
-        table.insert(candidates, _G.RealYoUI)
-    end
-
+    if shared and shared.RealYoUI then table.insert(candidates, shared.RealYoUI) end
+    local genvOK, g = pcall(function() if getgenv then return getgenv() end return nil end)
+    if genvOK and g and g.RealYoUI then table.insert(candidates, g.RealYoUI) end
+    if _G and _G.RealYoUI then table.insert(candidates, _G.RealYoUI) end
     for _, ui in ipairs(candidates) do
         if type(ui) == "table" and ui.IsRealYoUI == true and type(ui.Initialize) == "function" then
             return ui
         end
     end
-
     return nil
 end
 
 local function HttpGetText(url)
-    local ok, body = pcall(function()
-        return game:HttpGet(url)
-    end)
-
-    if ok and type(body) == "string" and body ~= "" then
-        return body
-    end
-
+    local ok, body = pcall(function() return game:HttpGet(url) end)
+    if ok and type(body) == "string" and body ~= "" then return body end
     local req = request or http_request or (syn and syn.request)
     if type(req) == "function" then
-        local res = req({
-            Url = url,
-            Method = "GET",
-        })
-
-        if type(res) == "table" and type(res.Body) == "string" and res.Body ~= "" then
-            return res.Body
-        end
+        local res = req({ Url = url, Method = "GET" })
+        if type(res) == "table" and type(res.Body) == "string" and res.Body ~= "" then return res.Body end
     end
-
     error(body or "HttpGet failed")
 end
 
-local UI = PickRealYoUI()
+local function LoadFromSource(source)
+    local fn, err = loadstring(source)
+    local repaired = false
+    if type(fn) ~= "function" then
+        local fixed = RepairSource(source)
+        local fn2, err2 = loadstring(fixed)
+        if type(fn2) ~= "function" then
+            return nil, ("raw: %s | repaired: %s"):format(tostring(err), tostring(err2))
+        end
+        fn = fn2; repaired = true
+        pcall(function() if setclipboard then setclipboard(fixed) end end)
+    end
+    local ok, ret = pcall(fn)
+    if not ok then return nil, "runtime: " .. tostring(ret) end
+    if repaired then warn("[RealYoUI] remote source was corrupted; auto-repaired (fixed copy -> clipboard)") end
+    return ret, nil
+end
 
+local UI = PickRealYoUI()
 if not UI then
     local lastError = "no published RealYoUI host"
-
     for _, url in ipairs(LIB_URLS) do
-        local ok, ret = pcall(function()
-            local source = HttpGetText(url)
-
-            if type(loadstring) ~= "function" then
-                error("loadstring unavailable")
-            end
-
-            local fn = loadstring(source)
-            if type(fn) ~= "function" then
-                error("loadstring compile failed")
-            end
-
-            return fn()
-        end)
-
-        if ok then
-            UI = PickRealYoUI()
-
-            if not UI and type(ret) == "table" then
-                UI = ret
-            end
-
-            if UI then
-                break
-            end
-
-            lastError = "script executed but UI table not found"
+        local ok, source = pcall(HttpGetText, url)
+        if not ok then
+            lastError = tostring(source)
+        elseif source:match("^%s*404") or source:find("<html", 1, true) or source:find("<!DOCTYPE", 1, true) then
+            lastError = "URL returned 404/html, not Lua"
         else
-            lastError = tostring(ret)
+            local ret, err = LoadFromSource(source)
+            UI = PickRealYoUI()
+            if not UI and type(ret) == "table" then UI = ret end
+            if UI then break end
+            lastError = err or "script executed but UI table not found"
         end
     end
-
     if not UI or UI.IsRealYoUI ~= true or type(UI.Initialize) ~= "function" then
         warn("[RealYoUI] UI library load failed. Detail: " .. tostring(lastError))
         return
