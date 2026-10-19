@@ -66,7 +66,6 @@ if AUTO_ACCEPT and HostUI then
             Protocol = HostUI.BridgeProtocol or 2,
             Name = GAME.Name,
             RequestedCategory = "Info",
-            Priority = 90,
             Category = "Info",
             Sub = "Annc",
             Mode = "Replace",
@@ -84,11 +83,25 @@ if AUTO_ACCEPT and HostUI then
 end
 
 if Runtime.Mode == "Host" then
-    SafeCall("RenameMain1", function() HostUI:RenameMain(1, "RealYoHub") end)
-    SafeCall("RenameSub11", function() HostUI:RenameSub(1, 1, "Area 51") end)
-    SafeCall("RenameSub12", function() HostUI:RenameSub(1, 2, "Gun Modded") end)
-    SafeCall("RenameSub13", function() HostUI:RenameSub(1, 3, "Teleport") end)
-    SafeCall("RenameSub14", function() HostUI:RenameSub(1, 4, "FE Tools") end)
+    SafeCall("RenameMain1", function()
+    HostUI:RenameMain(1, "RealYoHub")
+end)
+
+SafeCall("RenameSub11", function()
+    HostUI:RenameSub(1, 1, "Area 51")
+end)
+
+SafeCall("RenameSub12", function()
+    HostUI:RenameSub(1, 2, "Gun Modded")
+end)
+
+SafeCall("RenameSub13", function()
+    HostUI:RenameSub(1, 3, "Teleport")
+end)
+
+SafeCall("RenameSub14", function()
+    HostUI:RenameSub(1, 4, "FE Tools")
+end)
 end
 
 local function Notify(title, content, duration, icon)
