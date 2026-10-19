@@ -368,7 +368,7 @@ local function BuildArea51(A)
                 local btn = Workspace:FindFirstChild("Incinerator") and Workspace.Incinerator:FindFirstChild("ChallengeButton7") and Workspace.Incinerator.ChallengeButton7:FindFirstChild("Button")
                 if btn then
                     local p = btn:FindFirstChildOfClass("ProximityPrompt")
-                    if p then p.HoldDuration = 0 fireproximityprompt(p) end
+                    if p then p.HoldDuration = 0; fireproximityprompt(p) end
                 end
                 task.wait(0.8)
                 root.CFrame = CFrame.new(623.5, 1072, 749.75)
