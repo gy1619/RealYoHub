@@ -260,8 +260,7 @@ local MakeDropdown = UI.MakeDropdown; local MakeColorPicker = UI.MakeColorPicker
 local MakeInlineAlphaSlider = UI.MakeInlineAlphaSlider; local FlowOf = UI.FlowOf; local CreateGrid = UI.CreateGrid
 local COL = UI.COL; local License = UI.License; local DEVICE_ID = UI.DEVICE_ID; local pages = UI.pages
 local ApplyTheme = UI.ApplyTheme; local ApplyFont = UI.ApplyFont; local LoadAvatar = UI.LoadAvatar
-local ListConfigNames = UI.ListConfigNames; local SaveConfig = UI.SaveConfig; local LoadConfig = UI.LoadConfig
-local DeleteConfig = UI.DeleteConfig; local GetAutoLoad = UI.GetAutoLoad; local SetAutoLoad = UI.SetAutoLoad
+
 local function ScrollOf(page)
     if not page then
         warn("[RealYoUI] ScrollOf: page is nil")
@@ -415,7 +414,6 @@ end
 RunService.RenderStepped:Connect(function() if ESP.Rainbow and UI.UIVisible then UpdatePreviewESP() end end)
 
 -- ✅ 页面构建
--- ✅ 页面构建
 local home = ScrollOf(pages[1][1])
 MakeText(home, "Status: " .. License.Status, COL.Green)
 MakeButton(home, "Join Discord", function() setclipboard("https://discord.gg/SjRufjdF33") end)
@@ -434,29 +432,17 @@ MakeSection(home, "Config Management")
 MakeButton(home, "Reset All Settings", function()
     UI:ResetAllSettings()
 end)
+MakeText(home, "Settings are automatically saved on change.", COL.TextDim)
 
 local sc12 = ScrollOf(pages[1][2])
 MakeSection(sc12, "Not yet")
 MakeText(sc12, "SZELON0 on top", COL.TextDim)
 
--- ✅ 清空 Config 页面，变成提示
+-- ✅ 清空 Config 页面，变成提示 (彻底删除旧代码)
 local cfg = ScrollOf(pages[1][3])
 MakeSection(cfg, "Auto Save")
-MakeText(cfg, "settings automatically saved.", COL.Green)
-
-local cfg = ScrollOf(pages[1][3])
-MakeSection(cfg, "Config")
-local cfgNameBox = MakeTextBox(cfg, "Config name", "default")
-local initNames = ListConfigNames()
-local cfgDrop = MakeDropdown(cfg, "Config choose", (#initNames > 0) and initNames or {"No config"}, (#initNames > 0) and initNames[1] or "No config", function(opt) if opt ~= "No config" then cfgNameBox.Text = opt end end)
-local cfgGrid = CreateGrid(cfg)
-MakeButton(cfgGrid, "Save config", function() local n = cfgNameBox.Text:gsub("^%s+", ""):gsub("%s+$", ""); if n == "" then Toast("input name") return end; SaveConfig(n); cfgDrop.SetOptions(ListConfigNames()) end)
-MakeButton(cfgGrid, "Open config", function() local n = cfgNameBox.Text:gsub("^%s+", ""):gsub("%s+$", ""); if n == "" then Toast("input name") return end; LoadConfig(n) end)
-MakeButton(cfgGrid, "Delete config", function() local n = cfgNameBox.Text:gsub("^%s+", ""):gsub("%s+$", ""); if n == "" then Toast("input name") return end; DeleteConfig(n); cfgDrop.SetOptions(ListConfigNames()) end)
-MakeButton(cfgGrid, "refresh list", function() cfgDrop.SetOptions(ListConfigNames()); Toast("refreshed") end)
-local autoOn0, autoName0 = GetAutoLoad()
-MakeToggle(cfg, "Set as auto load", autoOn0, function(on) local n = cfgNameBox.Text:gsub("^%s+", ""):gsub("%s+$", ""); if n == "" then n = "default" end; SetAutoLoad(on, n); Toast(on and ("Execute will auto load: " .. n) or "close auto load") end, false)
-MakeText(cfg, "Config save in directory RealYo_Configs", COL.TextDim)
+MakeText(cfg, "All settings are now automatically saved.", COL.Green)
+MakeText(cfg, "To wipe your config and reset to default, go to the Info tab.", COL.TextDim)
 
 local sc14 = ScrollOf(pages[1][4])
 MakeSection(sc14, "theme")
@@ -577,6 +563,6 @@ LoadAvatar()
 task.delay(2.5, UpdatePreviewESP)
 LocalPlayer.CharacterAdded:Connect(function() taskWait(2); LoadAvatar() end)
 taskWait(0.5)
-Toast("Loaded. HWID: " .. tostring(DEVICE_ID))
+Toast("Loaded, HWID: " .. tostring(DEVICE_ID))
 taskWait(0.5)
 Toast("Loaded Successfully")
