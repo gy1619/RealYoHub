@@ -1,6 +1,6 @@
 -- RealYoUI.lua (Astool.lua)
 local Lib = {
-    Version = "5.0.1",
+    Version = "5.0.2",
     Brand = "RealYoUI",
     BridgeProtocol = 2,
     IsRealYoUI = true,
@@ -102,27 +102,11 @@ local function GetRobloxClientId()
     end
     return nil
 end
-
-local function GetInjectorHWID()
-    local cands = { "gethwid", "get_hwid", "GetHwid", "gethardwareid", "get_sha1", "get_machine_id" }
-    for _, fn in ipairs(cands) do
-        local f = _G[fn]
-        if type(f) == "function" then
-            local ok, r = pcall(f)
-            if ok and r and type(r) == "string" and #r > 5 then return r end
-        end
-    end
-    return nil
-end
-
 local function GenerateUniqueHWID()
     local raw = GetRobloxClientId()
     if raw then return "R_" .. raw end
-    raw = GetInjectorHWID()
-    if raw then return "I_" .. raw end
     return "U_" .. tostring(LocalPlayer.UserId)
 end
-
 local function AdvancedHash(str)
     local h1 = 0x811c9dc5
     local h2 = 0x9e3779b9
@@ -131,18 +115,12 @@ local function AdvancedHash(str)
         h1 = bit32.bxor(h1, byte) * 0x01000193 % 0x100000000
         h2 = (h2 + byte) * 0x9e3779b9 % 0x100000000
     end
-    local final = (h1 * 2654435761 + h2) % 0x100000000
-    return string.format("%08X%08X", h1, final)
+    return string.format("%08X%08X", h1, (h1 * 2654435761 + h2) % 0x100000000)
 end
-
-local RAW_HWID = GenerateUniqueHWID()
-local DEVICE_ID = AdvancedHash(RAW_HWID .. "RealYo_SZE_SALT_V1")
+local DEVICE_ID = AdvancedHash(GenerateUniqueHWID() .. "RealYo_SZE_SALT_V1")
 Lib.DEVICE_ID = DEVICE_ID
+Lib.License = { Mode = "open", Status = "Free", Remain = "temporarily Keyless", BoundDevice = DEVICE_ID }
 
-local License = { Mode = "open", Status = "Free", Remain = "temporarily Keyless", BoundDevice = DEVICE_ID }
-Lib.License = License
-
--- ✅✅✅ 核心修改：Config 系统 (加入内存缓存 AutoSaveData 解决动态注入加载问题) ✅✅✅
 local SettingRegistry = {}
 local AutoSaveData = {}
 local autoSaveTask = nil
@@ -150,31 +128,24 @@ local isResetting = false
 
 local function RegisterSetting(name, kind, get, set, group, default)
     table.insert(SettingRegistry, { name = name, kind = kind, get = get, set = set, group = group, default = default })
-    
-    -- ✅ 如果内存缓存中有该设置，立刻应用（解决 area51 后注入无法读取配置的问题）
     local val = nil
     if group and type(AutoSaveData[group]) == "table" then
         val = AutoSaveData[group][name]
     else
         val = AutoSaveData[name]
     end
-    if val ~= nil then
-        pcall(set, val)
-    end
+    if val ~= nil then pcall(set, val) end
 end
 Lib.RegisterSetting = RegisterSetting
 
 function Lib:PurgeSettings(group)
     for i = #SettingRegistry, 1, -1 do
-        if SettingRegistry[i].group == group then
-            table.remove(SettingRegistry, i)
-        end
+        if SettingRegistry[i].group == group then table.remove(SettingRegistry, i) end
     end
 end
 
 local function TriggerAutoSave()
     if type(writefile) ~= "function" or isResetting then return end
-    -- ✅ 更新内存缓存
     AutoSaveData = {}
     for _, e in ipairs(SettingRegistry) do
         local val = e.get()
@@ -185,7 +156,6 @@ local function TriggerAutoSave()
             AutoSaveData[e.name] = val
         end
     end
-    
     if autoSaveTask then task.cancel(autoSaveTask) end
     autoSaveTask = task.delay(1.0, function()
         EnsureFolder()
@@ -197,11 +167,9 @@ function Lib:ResetAllSettings()
     isResetting = true
     if autoSaveTask then task.cancel(autoSaveTask); autoSaveTask = nil end
     AutoSaveData = {}
-    
     for _, e in ipairs(SettingRegistry) do
         if e.default ~= nil then pcall(e.set, e.default) end
     end
-    
     if type(delfile) == "function" and type(isfile) == "function" then
         if isfile(CFG_DIR .. "/autosave.json") then
             pcall(function() delfile(CFG_DIR .. "/autosave.json") end)
@@ -228,87 +196,6 @@ local function Toast(msg)
     label:Destroy()
 end
 Lib.Toast = Toast
-
-local function ListConfigNames()
-    local names = {}
-    pcall(function()
-        if type(listfiles) == "function" then
-            for _, p in ipairs(listfiles(CFG_DIR)) do
-                local path = tostring(p):gsub("\\", "/")
-                local n = path:match("([^/]+)%.json$")
-                if n and n ~= "autoload" and n ~= "autosave" then table.insert(names, n) end
-            end
-        end
-    end)
-    return names
-end
-Lib.ListConfigNames = ListConfigNames
-
-local function SaveConfig(name)
-    if not FileSupport() then Toast("fail") return end
-    local data = {}
-    for _, e in ipairs(SettingRegistry) do
-        local val = e.get()
-        if e.group then
-            if not data[e.group] then data[e.group] = {} end
-            data[e.group][e.name] = val
-        else
-            data[e.name] = val
-        end
-    end
-    EnsureFolder()
-    local ok = pcall(function() writefile(CFG_DIR .. "/" .. name .. ".json", HttpService:JSONEncode(data)) end)
-    Toast(ok and ("saved: " .. name) or "fail")
-end
-Lib.SaveConfig = SaveConfig
-
-local function LoadConfig(name)
-    if not FileSupport() then Toast("fail") return end
-    local path = CFG_DIR .. "/" .. name .. ".json"
-    local ok, raw = pcall(function() if not isfile(path) then return nil end return readfile(path) end)
-    if not ok or not raw then Toast("not found: " .. name) return end
-    local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
-    if not ok2 or type(data) ~= "table" then Toast("config broke: " .. name) return end
-    
-    local count = 0
-    for _, e in ipairs(SettingRegistry) do
-        local val = nil
-        if e.group and type(data[e.group]) == "table" then
-            val = data[e.group][e.name]
-        else
-            val = data[e.name]
-        end
-        if val ~= nil then
-            local okSet = pcall(e.set, val)
-            if okSet then count = count + 1 end
-        end
-    end
-    Toast(("config readed: %s (%d items)"):format(name, count))
-end
-Lib.LoadConfig = LoadConfig
-
-local function DeleteConfig(name)
-    if not FileSupport() then Toast("fail") return end
-    local ok = pcall(function() if isfile(CFG_DIR .. "/" .. name .. ".json") then delfile(CFG_DIR .. "/" .. name .. ".json") end end)
-    Toast(ok and ("deleted: " .. name) or "fail")
-end
-Lib.DeleteConfig = DeleteConfig
-
-local function GetAutoLoad()
-    local ok, raw = pcall(function() if not isfile(AUTO_FILE) then return nil end return readfile(AUTO_FILE) end)
-    if not ok or not raw then return false, nil end
-    local ok2, d = pcall(function() return HttpService:JSONDecode(raw) end)
-    if ok2 and type(d) == "table" then return d.enabled == true, d.name end
-    return false, nil
-end
-Lib.GetAutoLoad = GetAutoLoad
-
-local function SetAutoLoad(enabled, name)
-    if not FileSupport() then Toast("fail") return end
-    EnsureFolder()
-    pcall(function() writefile(AUTO_FILE, HttpService:JSONEncode({ enabled = enabled, name = name })) end)
-end
-Lib.SetAutoLoad = SetAutoLoad
 
 local rainbowGrads = {}
 local rainbowT0 = tick()
@@ -551,6 +438,7 @@ local function MakeTextBox(parent, placeholder, default)
     return box
 end
 
+-- ✅ 修复：Toggle 独立标记属性，防止被 ApplyAll 错误识别
 local function MakeToggle(parent, text, default, cb, register, group)
     if register == nil then register = true end
     local host = AsFlow(parent).Add(S(36) + EstW(text) + S(10), S(28))
@@ -562,25 +450,28 @@ local function MakeToggle(parent, text, default, cb, register, group)
         BackgroundColor3 = state and AP.Accent or offColor, Parent = row,
     })
     AddCorner(box, S(3))
-    box:SetAttribute("role", "accentbg")
+    
+    -- ✅ 抛弃 role，改用独有标记，这样换主题时就不会被错误刷新成强调色
+    box:SetAttribute("IsToggle", true)
+    box:SetAttribute("ToggleState", state)
+    
     local label = Create("TextLabel", {
         Size = UDim2.new(1, -S(26), 1, 0), Position = UDim2.fromOffset(S(26), 0), BackgroundTransparency = 1,
         Text = text, TextColor3 = AP.Text, TextSize = TS(13), Font = Enum.Font.Gotham,
         TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = row,
     })
     
-    -- ✅ 修复：保证 cb 每次都触发，但只在 fire 为 true 时保存
     local function apply(v, fire)
         v = v and true or false
         if v == state then return end
         state = v
         box.BackgroundColor3 = state and AP.Accent or offColor
+        box:SetAttribute("ToggleState", state) -- 同步状态
         if cb then cb(state) end
         if fire then TriggerAutoSave() end
     end
     SafeClick(row, function() apply(not state, true) end)
     
-    -- ✅ 传入 apply(v, false)，避免初始化加载配置时触发无意义的自动保存
     if register then RegisterSetting(text, "toggle", function() return state end, function(v) apply(v, false) end, group, default) end
     return row
 end
@@ -620,7 +511,6 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
     local currentVal = default
     local dragging = false
     
-    -- ✅ 修复：保证 cb 每次都触发，但只在 fire 为 true 时保存
     local function setRatio(r, fire)
         r = math.clamp(r, 0, 1)
         fill.Size = UDim2.new(r, 0, 1, 0)
@@ -680,7 +570,6 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
         end
     end)
     
-    -- ✅ 传入 setRatio(..., false)，避免初始化加载配置时触发无意义的自动保存
     RegisterSetting(text, "slider", function() return currentVal end, function(v)
         v = tonumber(v) or default
         if v > max then max = v end 
@@ -698,7 +587,8 @@ UserInputService.InputBegan:Connect(function(inp)
     end
 end)
 
-local function MakeDropdown(parent, text, options, default, cb)
+-- ✅ 修复：给 Dropdown 加入配置注册和保存
+local function MakeDropdown(parent, text, options, default, cb, group)
     local row = AsFlow(parent).Add(S(150) + EstW(text, TS(12)) + S(16), S(30))
     local btn = Create("TextButton", {
         Size = UDim2.fromOffset(S(150), S(26)), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 0.35,
@@ -707,7 +597,7 @@ local function MakeDropdown(parent, text, options, default, cb)
     })
     AddCorner(btn, S(5))
     Create("UIStroke", { Thickness = 1, Color = Color3.fromRGB(160, 160, 160), Transparency = 0.4 }, btn)
-    local desc = Create("TextLabel", {
+    Create("TextLabel", {
         Size = UDim2.new(1, -S(154), 1, 0), Position = UDim2.fromOffset(S(154), 0), BackgroundTransparency = 1,
         Text = text, TextColor3 = COL.TextDim, TextSize = TS(12), Font = Enum.Font.Gotham,
         TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = row,
@@ -719,7 +609,15 @@ local function MakeDropdown(parent, text, options, default, cb)
     AddCorner(list, S(5))
     Create("UIListLayout", { Padding = UDim.new(0, S(2)) }, list)
     Create("UIPadding", { PaddingTop = UDim.new(0, S(3)), PaddingLeft = UDim.new(0, S(3)), PaddingRight = UDim.new(0, S(3)) }, list)
+    
     local handle = {}; local cur = default
+    local function setValue(v, fire)
+        cur = v
+        btn.Text = v .. " v"
+        if cb then cb(v) end
+        if fire then TriggerAutoSave() end
+    end
+    
     local function buildOptions(opts)
         for _, c in ipairs(list:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
         for _, opt in ipairs(opts) do
@@ -729,8 +627,8 @@ local function MakeDropdown(parent, text, options, default, cb)
                 Font = Enum.Font.Gotham, AutoButtonColor = false, Parent = list,
             })
             SafeClick(ob, function()
-                cur = opt; btn.Text = opt .. " v"; CloseDropdown()
-                if cb then cb(opt) end
+                setValue(opt, true)
+                CloseDropdown()
             end)
         end
         list.Size = UDim2.fromOffset(S(150), S(26) * #opts + S(6))
@@ -744,11 +642,16 @@ local function MakeDropdown(parent, text, options, default, cb)
         list.Position = UDim2.fromOffset(btn.AbsolutePosition.X, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y + S(4))
         list.Visible = true; openDropdown = list
     end)
+    
+    -- ✅ 注册配置记录
+    RegisterSetting(text, "dropdown", function() return cur end, function(v) setValue(v, false) end, group, default)
     return handle
 end
 
 local function TagObj(d)
     if d:GetAttribute("role") then return end
+    if d:GetAttribute("IsToggle") then return end -- ✅ 剥离 Toggle，不让全局主题强制覆盖它的颜色
+    
     if d:IsA("UIStroke") then d:SetAttribute("role", d:FindFirstChildOfClass("UIGradient") and "rainbow" or "stroke"); return end
     local isGui = d:IsA("Frame") or d:IsA("TextButton") or d:IsA("TextBox") or d:IsA("TextLabel")
     if not isGui then return end
@@ -809,6 +712,16 @@ local function ApplyTheme(name)
     for k, v in pairs(t) do AP[k] = v end
     COL.PillGray = AP.Panel; COL.TextDark = AP.Text; COL.TextDim = AP.Dim; COL.Red = AP.Accent
     QueueApply()
+    
+    -- ✅ 换主题时，更新所有 Toggle 的真实颜色（防全开假象）
+    if ScreenGui then
+        for _, d in ipairs(ScreenGui:GetDescendants()) do
+            if d:GetAttribute("IsToggle") then
+                local st = d:GetAttribute("ToggleState")
+                d.BackgroundColor3 = st and AP.Accent or Color3.fromRGB(120, 120, 120)
+            end
+        end
+    end
     Toast("Theme: " .. name)
 end
 
@@ -820,6 +733,14 @@ local function SetTargetColor(target, col)
     elseif target == "emphasis color" then AP.Accent = col; COL.Red = col
     elseif target == "frame" then AP.Border = col; AP.BorderRainbow = false end
     QueueApply()
+    if ScreenGui then
+        for _, d in ipairs(ScreenGui:GetDescendants()) do
+            if d:GetAttribute("IsToggle") then
+                local st = d:GetAttribute("ToggleState")
+                d.BackgroundColor3 = st and AP.Accent or Color3.fromRGB(120, 120, 120)
+            end
+        end
+    end
 end
 
 local function ApplyFont(fontName)
@@ -1149,7 +1070,6 @@ function Lib:Initialize(opts)
         return sc
     end
     
-    -- ✅ 自动加载 autosave.json (同步加载到 AutoSaveData 内存缓存)
     local targetCFG = CFG_DIR or "RealYo_Configs"
     if type(isfile) == "function" and isfile(targetCFG .. "/autosave.json") then
         local ok, raw = pcall(readfile, targetCFG .. "/autosave.json")
@@ -1180,7 +1100,6 @@ end
 local function FindPageIndices(category, sub)
     category = Trim(category)
     sub = Trim(sub)
-
     local mNames = Lib._mainNames or { "Info", "ESP", "FE", "ScriptHub" }
     local sSets = Lib._subNameSets or {
         { "Annc", "Other", "Config", "Theme" },
@@ -1188,7 +1107,6 @@ local function FindPageIndices(category, sub)
         { "Movement", "Character", "World", "Practical" },
         { "RealYoHub", "Keyless Script", "Keys Script", "Admin" },
     }
-
     for m, mn in ipairs(mNames) do
         if Trim(mn) == category then
             for j, sn in ipairs(sSets[m] or {}) do
@@ -1257,7 +1175,7 @@ function BridgeMeta:Create(comp)
         return self.UI.MakeSlider(host, text, comp.Min or 0, comp.Max or 100, comp.Default or comp.Min or 0, cb, group)
     elseif kind == "Dropdown" then
         local opts = comp.Options or {}
-        return self.UI.MakeDropdown(host, text, opts, comp.Default or opts[1], cb)
+        return self.UI.MakeDropdown(host, text, opts, comp.Default or opts[1], cb, group)
     elseif kind == "TextBox" or kind == "Input" then
         return self.UI.MakeTextBox(host, comp.Placeholder or text, comp.Default or " ")
     elseif kind == "Grid" then
@@ -1276,7 +1194,7 @@ function BridgeMeta:Slider(text, min, max, default, cb, opts)
     opts = opts or {}
     return self:Create({ Type = "Slider", Text = text, Min = min, Max = max, Default = default, Callback = cb, Host = opts.Host, Group = opts.Group })
 end
-function BridgeMeta:Dropdown(text, options, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Dropdown", Text = text, Options = options, Default = default, Callback = cb, Host = opts.Host }) end
+function BridgeMeta:Dropdown(text, options, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Dropdown", Text = text, Options = options, Default = default, Callback = cb, Host = opts.Host, Group = opts.Group }) end
 function BridgeMeta:TextBox(placeholder, default, opts) opts = opts or {}; return self:Create({ Type = "TextBox", Placeholder = placeholder, Default = default, Host = opts.Host }) end
 
 function Lib:RenameMain(i, newName)
