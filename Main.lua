@@ -159,7 +159,7 @@ local function UpdatePreviewESP()
 end
 RunService.RenderStepped:Connect(function() if ESP.Rainbow and UI.UIVisible then UpdatePreviewESP() end end)
 
--- ✅ 页面构建 (注意：如果 Info 被顶替，pages[1] 的内容会被移走，但这里初始化时还是按原样构建)
+-- ✅ 页面构建
 local home = ScrollOf(pages[1][1])
 MakeText(home, "Status: " .. License.Status, COL.Green)
 MakeButton(home, "Join Discord", function() setclipboard("https://discord.gg/SjRufjdF33") end)
@@ -253,12 +253,17 @@ local util = ScrollOf(pages[3][4])
 MakeButton(util, "Copy current location", function() local root = GetRoot(); if not root then Toast("角色未就绪") return end; if setclipboard then pcall(function() setclipboard(tostring(root.CFrame)) end); Toast("copy") else Toast("注入器不支持剪贴板") end end)
 MakeButton(util, "Rejoin", function() pcall(function() TeleportService:Teleport(game.PlaceId) end) end)
 
+-- ✅ RealYoHub / ScriptHub 页面 (Index 4) - 包含所有其他脚本按钮
 local script1 = ScrollOf(pages[4][1])
 MakeButton(script1, "Survive in area 51!", function()
     local url = "https://raw.githubusercontent.com/gy1619/RealYoHub/refs/heads/main/Area51.lua?t=" .. os.time()
     local ok, err = pcall(function() loadstring(game:HttpGet(url))() end)
     Toast(ok and "Executed" or ("Fail: " .. tostring(err):sub(1, 60)))
 end)
+MakeButton(script1, "BrookHaven RP", function() local ry = pcall(function() loadstring(game:HttpGet("https://gist.githubusercontent.com/gy1619/29ee3701d50f59ee4061c5a96d7a79c5/raw/bf871ba30f57e8929a4d847841114f31d9f73894/bhhrp.lua"))() end); Toast(ry and "Executed" or "Fail") end)
+MakeButton(script1, "My Restaurant", function() local ry = pcall(function() loadstring(game:HttpGet("https://gist.githubusercontent.com/gy1619/a44f37202fd255c36bfd2e05b66204bd/raw/374703400612786c6ad8b1dbe57d9de42f3c879b/My%20Restaurant.lua"))() end); Toast(ry and "Executed" or "Fail") end)
+MakeButton(script1, "Cut Grass", function() local ry = pcall(function() loadstring(game:HttpGet("https://gist.githubusercontent.com/gy1619/58841eb6cb738a4c9fffeaee95d8d6c8/raw/77d5043da62b0a092f0416787d6ca284899d8ece/Cut%20Grass.lua"))() end); Toast(ry and "Executed" or "Fail") end)
+MakeButton(script1, "Poop a Big Poop", function() local ry = pcall(function() loadstring(game:HttpGet("https://gist.githubusercontent.com/gy1619/ddd84a349399d4059acd9778c79b73c4/raw/403cdb6417fc2a5af213d0eaafde1a643b1d6155/pabp.lua"))() end); Toast(ry and "Executed" or "Fail") end)
 MakeText(script1, "RealYoHub", COL.TextDim)
 
 local script2 = ScrollOf(pages[4][2]); MakeText(script2, "Not Yet", COL.TextDim)
