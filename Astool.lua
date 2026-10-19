@@ -409,11 +409,16 @@ local function TagObj(d)
 end
 local function ApplyObj(d)
     local role = d:GetAttribute("role")
+    -- ✅ 修复：去除所有 role 匹配字符串尾部的幽灵空格
     if role == "panel" then d.BackgroundColor3 = AP.Panel; d.BackgroundTransparency = AP.PanelT
     elseif role == "comp" then d.BackgroundColor3 = AP.Comp; d.BackgroundTransparency = AP.CompT; if d:IsA("TextButton") or d:IsA("TextBox") then d.TextColor3 = AP.Text end
-    elseif role == "text" then d.TextColor3 = AP.Text elseif role == "dim" then d.TextColor3 = AP.Dim elseif role == "accenttext" then d.TextColor3 = AP.Accent
-    elseif role == "accentbg" then d.BackgroundColor3 = AP.Accent elseif role == "stroke" then d.Color = AP.Stroke
+    elseif role == "text" then d.TextColor3 = AP.Text
+    elseif role == "dim" then d.TextColor3 = AP.Dim
+    elseif role == "accenttext" then d.TextColor3 = AP.Accent
+    elseif role == "accentbg" then d.BackgroundColor3 = AP.Accent
+    elseif role == "stroke" then d.Color = AP.Stroke
     elseif role == "rainbow" then local g = d:FindFirstChildOfClass("UIGradient"); if g then if AP.BorderRainbow then g.Color = RAINBOW_SEQ else g.Color = ColorSequence.new(AP.Border, AP.Border) end end end
+    end
 end
 local function ApplyAll()
     pcall(function() for _, p in ipairs(panelList) do p.BackgroundColor3 = AP.Panel; p.BackgroundTransparency = AP.PanelT end end)
