@@ -1,22 +1,16 @@
--- Main Script.lua (loader v3: 空格修复 + Luau 方言兼容过滤)
+-- Main Script.lua (loader v5: 空格修复 + Luau兼容 + 缺缩放块自动补插)
 local LIB_URLS = {
     "https://raw.githubusercontent.com/gy1619/RealYoHub/refs/heads/main/Astool.lua?t=" .. tostring(os.time()),
     "https://raw.githubusercontent.com/gy1619/RealYoHub/main/Astool.lua?t=" .. tostring(os.time()),
 }
 
--- ========== 1. Luau 方言兼容过滤器 (专治 AI 的 Lua 5.3 幻觉) ==========
+-- ========== 1. Luau 方言兼容过滤器 ==========
 local function FixLuauCompat(src)
     local count = 0
-    
-    -- 规则 A: 把 Lua 5.3 的位异或 (a ~ b) 转换成 Roblox 的 bit32.bxor(a, b)
-    -- 匹配模式: (变量 ~ 变量) -> bit32.bxor(变量, 变量)
-    -- 注意: 不会误伤 ~= (不等于)，因为 ~= 后面跟的是 =，而我们的模式要求 ~ 后面跟的是字母/数字/下划线
     src = src:gsub("%(([%w_%.]+)%s*~%s*([%w_%.]+)%s*%)", function(a, b)
         count = count + 1
         return "bit32.bxor(" .. a .. ", " .. b .. ")"
     end)
-    
-    -- 规则 B: 把 Lua 5.3 的位移 (a << b) / (a >> b) 转换成 bit32.lshift / bit32.rshift
     src = src:gsub("%(([%w_%.]+)%s*<<%s*([%w_%.]+)%s*%)", function(a, b)
         count = count + 1
         return "bit32.lshift(" .. a .. ", " .. b .. ")"
@@ -25,25 +19,40 @@ local function FixLuauCompat(src)
         count = count + 1
         return "bit32.rshift(" .. a .. ", " .. b .. ")"
     end)
-
-    -- 规则 C: 把 Lua 5.3 的位与 (a & b) / 位或 (a | b) 转换 (虽然你代码里没用到，但以防万一)
-    src = src:gsub("%(([%w_%.]+)%s*&%s*([%w_%.]+)%s*%)", function(a, b)
-        count = count + 1
-        return "bit32.band(" .. a .. ", " .. b .. ")"
-    end)
-    src = src:gsub("%(([%w_%.]+)%s*|%s*([%w_%.]+)%s*%)", function(a, b)
-        count = count + 1
-        return "bit32.bor(" .. a .. ", " .. b .. ")"
-    end)
-
     if count > 0 then
-        warn(("[RealYoUI] Luau Compat Filter: auto-converted %d Lua 5.3 bitwise ops to bit32"):format(count))
+        warn(("[RealYoUI] Luau Compat Filter: converted %d bitwise ops"):format(count))
     end
-    
     return src
 end
 
--- ========== 2. 空格/断词修复引擎 (保持不变) ==========
+-- ========== 2. 缺失缩放块自动补插 (S/TS/vpSize/UI_SCALE) ==========
+local SCALE_BLOCK = [[
+local camNow = workspace.CurrentCamera
+local vpSize = (camNow and camNow.ViewportSize) or Vector2.new(1280, 720)
+if vpSize.X < 100 then vpSize = Vector2.new(1280, 720) end
+local UI_SCALE = math.min(vpSize.X / 1280, vpSize.Y / 720)
+if UI_SCALE <= 0 then UI_SCALE = 1 end
+local function S(v) return v * UI_SCALE end
+local function TS(v) return math.max(10, math.floor(v * UI_SCALE)) end
+Lib.S = S
+Lib.TS = TS
+]]
+
+local function FixMissingScale(src)
+    if src:find("local%s+UI_SCALE") or src:find("local%s+function%s+S%(v%)") then
+        return src
+    end
+    local out, n = src:gsub("(local%s+taskWait%s*=[^\n]*\n)", "%1" .. SCALE_BLOCK, 1)
+    if n == 0 then
+        out, n = src:gsub("(local%s+LocalPlayer%s*=%s*Players%.LocalPlayer\n)", "%1" .. SCALE_BLOCK, 1)
+    end
+    if n > 0 then
+        warn("[RealYoUI] Scale block missing -> auto-injected (S/TS/vpSize)")
+    end
+    return out
+end
+
+-- ========== 3. 空格/断词修复引擎 ==========
 local KW = {}
 for _, w in ipairs({
     "and","break","do","else","elseif","end","false","for","function",
@@ -135,7 +144,7 @@ local function RepairSource(src)
 end
 -- ========== 修复引擎结束 ==========
 
--- ========== 3. 核心加载逻辑 ==========
+-- ========== 4. 核心加载逻辑 ==========
 local function PickRealYoUI()
     local candidates = {}
     if shared and shared.RealYoUI then table.insert(candidates, shared.RealYoUI) end
@@ -162,11 +171,12 @@ local function HttpGetText(url)
 end
 
 local function LoadFromSource(source)
+    source = FixMissingScale(source)
     local fixed = FixLuauCompat(source)
     local fn, err = loadstring(fixed)
     local repaired = false
     if type(fn) ~= "function" then
-        fixed = FixLuauCompat(RepairSource(fixed))
+        fixed = FixMissingScale(FixLuauCompat(RepairSource(fixed)))
         local fn2, err2 = loadstring(fixed)
         if type(fn2) ~= "function" then
             return nil, ("raw: %s | repaired: %s"):format(tostring(err), tostring(err2))
@@ -174,7 +184,6 @@ local function LoadFromSource(source)
         fn = fn2
         repaired = true
     end
-
     local ok, ret = pcall(fn)
     if not ok then
         local errLine = tonumber(tostring(ret):match(":(%d+):"))
@@ -192,7 +201,10 @@ local function LoadFromSource(source)
         warn("[RealYoUI] full repaired source -> clipboard")
         return nil, "runtime: " .. tostring(ret)
     end
-    if repaired then warn("[RealYoUI] remote source was corrupted; auto-repaired") end
+    if repaired then
+        pcall(function() if setclipboard then setclipboard(fixed) end end)
+        warn("[RealYoUI] remote source was corrupted; auto-repaired (fixed copy -> clipboard)")
+    end
     return ret, nil
 end
 
