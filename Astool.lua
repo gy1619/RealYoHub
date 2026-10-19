@@ -46,8 +46,8 @@ function Lib:DisplaceTab(highIndex, lowIndex)
     end
     local highPri = CurrentTabPriorities[highIndex]
     CurrentTabPriorities[lowIndex] = highPri
-    if self._refreshTopNames and self._getCurrentMain and self._getCurrentMain() == lowIndex then
-        self._refreshTopNames(lowIndex)
+    if self._refreshTopNames and self._getCurrentMain then
+        self._refreshTopNames(self._getCurrentMain())
     end
 end
 
