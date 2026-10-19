@@ -83,25 +83,11 @@ if AUTO_ACCEPT and HostUI then
 end
 
 if Runtime.Mode == "Host" then
-    SafeCall("RenameMain1", function()
-    HostUI:RenameMain(1, "RealYoHub")
-end)
-
-SafeCall("RenameSub11", function()
-    HostUI:RenameSub(1, 1, "Area 51")
-end)
-
-SafeCall("RenameSub12", function()
-    HostUI:RenameSub(1, 2, "Gun Modded")
-end)
-
-SafeCall("RenameSub13", function()
-    HostUI:RenameSub(1, 3, "Teleport")
-end)
-
-SafeCall("RenameSub14", function()
-    HostUI:RenameSub(1, 4, "FE Tools")
-end)
+    SafeCall("RenameMain1", function() HostUI:RenameMain(1, "RealYoHub") end)
+    SafeCall("RenameSub11", function() HostUI:RenameSub(1, 1, "Area 51") end)
+    SafeCall("RenameSub12", function() HostUI:RenameSub(1, 2, "Gun Modded") end)
+    SafeCall("RenameSub13", function() HostUI:RenameSub(1, 3, "Teleport") end)
+    SafeCall("RenameSub14", function() HostUI:RenameSub(1, 4, "FE Tools") end)
 end
 
 local function Notify(title, content, duration, icon)
@@ -116,7 +102,6 @@ local function BridgeAdapter(bridge)
     function A:Section(t) return self._b:Section(t) end
     function A:Label(t) return self._b:Label(t) end
     function A:Button(t, cb) return self._b:Button(t, cb) end
-    -- ✅ 关键：传入 group 参数，实现 AK47.Damage 这种嵌套保存
     function A:Toggle(t, def, cb, group) return self._b:Toggle(t, def, cb, { Group = group }) end
     function A:Slider(t, min, max, def, cb, group) return self._b:Slider(t, min, max, def, cb, { Group = group }) end
     function A:Input(t, placeholder, cb)
@@ -131,14 +116,13 @@ end
 -- ✅✅✅ 智能 Gun Modded V2 (实时监测 + 动态 Setting) ✅✅✅
 local function BuildGunModded(A)
     local bridge = A._b
-    local scrollHost = bridge.Host          -- 锁定滚动页，动态组件都挂在这里
-    local weaponData = {}                   -- name -> setting 表
-    local weaponDrop = nil                  -- 下拉框 handle
+    local scrollHost = bridge.Host
+    local weaponData = {}
+    local weaponDrop = nil
     local lastSig = nil
-    local dynFrame = nil                    -- 当前动态组件容器
-    local dynGroup = nil                    -- 当前动态组件的 config 分组
+    local dynFrame = nil
+    local dynGroup = nil
 
-    -- 1. 扫描武器：条件 = Tool 里有叫 Setting 的子物体（按你的要求）
     local function scanWeapons()
         weaponData = {}
         local list, seen = {}, {}
@@ -148,7 +132,7 @@ local function BuildGunModded(A)
             if not cfg or seen[tool.Name] then return end
             seen[tool.Name] = true
             table.insert(list, tool.Name)
-            local ok, setting = pcall(require, cfg)   -- ModuleScript，return 那张表
+            local ok, setting = pcall(require, cfg)
             if ok and type(setting) == "table" then
                 weaponData[tool.Name] = setting
             end
@@ -162,7 +146,6 @@ local function BuildGunModded(A)
         return list
     end
 
-    -- 2. 清掉旧动态组件 + 清掉它的 config 注册
     local function clearDyn()
         if dynFrame then pcall(function() dynFrame:Destroy() end) dynFrame = nil end
         if dynGroup then
@@ -173,7 +156,6 @@ local function BuildGunModded(A)
         end
     end
 
-    -- 3. 动态渲染某把武器的 Setting
     local function renderProperties(name)
         local setting = weaponData[name]
         if not setting then Notify("GunMod", "cannot read " .. name .. " Setting", 3) return end
@@ -190,12 +172,12 @@ local function BuildGunModded(A)
         lay.Parent = dynFrame
 
         local oldHost = bridge.Host
-        bridge.Host = dynFrame   -- ✅ 接下来的组件全部建进 dynFrame，换武器时整体销毁
+        bridge.Host = dynFrame
 
         A:Section("Properties for " .. name)
         local keys = {}
         for k in pairs(setting) do table.insert(keys, k) end
-        table.sort(keys)         -- 固定顺序，每次渲染不乱跳
+        table.sort(keys)
         for _, key in ipairs(keys) do
             local value = setting[key]
             local t = type(value)
@@ -203,7 +185,7 @@ local function BuildGunModded(A)
                 A:Toggle(key, value, function(v) setting[key] = v end, name)
             elseif t == "number" then
                 if key:match("ID$") or key:match("Id$") then
-                    A:Label(key .. " = " .. tostring(value))        -- 资产ID，只读
+                    A:Label(key .. " = " .. tostring(value))
                 elseif value == math.floor(value) then
                     local mx = (value <= 0) and 100 or math.clamp(value * 10, 10, 100000)
                     A:Slider(key, 0, mx, value, function(v) setting[key] = v end, name)
@@ -213,14 +195,13 @@ local function BuildGunModded(A)
                     A:Slider(key .. " (x0.01)", 0, mx100, v100, function(v) setting[key] = v / 100 end, name)
                 end
             else
-                A:Label(key .. " = " .. tostring(value))            -- Vector3/Enum/表 等只读
+                A:Label(key .. " = " .. tostring(value))
             end
         end
         bridge.Host = oldHost
         Notify("GunMod", "loaded " .. name .. " setting (" .. #keys .. " item)", 3)
     end
 
-    -- 4. 重扫 + 同步下拉框
     local function rescan()
         local list = scanWeapons()
         local sig = table.concat(list, "|")
@@ -233,7 +214,6 @@ local function BuildGunModded(A)
         return list
     end
 
-    -- 5. 实时监测：捡枪/装备/掉枪立刻刷新列表
     local function watchContainer(c)
         if not c then return end
         c.ChildAdded:Connect(function(ch)
@@ -247,7 +227,6 @@ local function BuildGunModded(A)
     if LocalPlayer.Character then watchContainer(LocalPlayer.Character) end
     LocalPlayer.CharacterAdded:Connect(function(ch) watchContainer(ch))
 
-    -- 6. UI
     A:Section("Weapon Scanner")
     local list = rescan()
     A:Button("Refresh Weapons", function()
@@ -368,6 +347,7 @@ local function BuildArea51(A)
                 local btn = Workspace:FindFirstChild("Incinerator") and Workspace.Incinerator:FindFirstChild("ChallengeButton7") and Workspace.Incinerator.ChallengeButton7:FindFirstChild("Button")
                 if btn then
                     local p = btn:FindFirstChildOfClass("ProximityPrompt")
+                    -- ✅ 修复了这里缺少分号导致的语法崩溃
                     if p then p.HoldDuration = 0; fireproximityprompt(p) end
                 end
                 task.wait(0.8)
@@ -582,7 +562,10 @@ local function BuildFETools(A)
                 local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
                 if hum then hum:ChangeState("Jumping") end
             end))
-        else for _, c in ipairs(connections) do c:Disconnect() end; connections = {} end
+        else 
+            for _, c in ipairs(connections) do c:Disconnect() end
+            connections = {} 
+        end
     end)
     A:Toggle("Auto Interact", false, function(v)
         if v then
@@ -591,10 +574,12 @@ local function BuildFETools(A)
                     if obj:IsA("ProximityPrompt") then fireproximityprompt(obj) end
                 end
             end))
-        else for _, c in ipairs(connections) do c:Disconnect() end; connections = {} end
+        else 
+            for _, c in ipairs(connections) do c:Disconnect() end
+            connections = {} 
+        end
     end)
 end
-
 
 -- ✅ 定义完整性自检 (防粘贴截断/错位导致的 nil 调用)
 local function DefCheck()
