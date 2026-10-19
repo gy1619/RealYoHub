@@ -545,7 +545,7 @@ local function RunRemoteLua(url, tag)
     end)
     return ok, err
 end
-
+local script1 = ScrollOf(pages[4][1])
 MakeButton(script1, "Survive in area 51!", function()
     local ok, err = RunRemoteLua("https://raw.githubusercontent.com/gy1619/RealYoHub/refs/heads/main/Area51.lua?t=" .. os.time(), "Area51")
     Toast(ok and "Executed" or ("Fail: " .. tostring(err):sub(1, 60)))
