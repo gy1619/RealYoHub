@@ -59,7 +59,15 @@ local okCore, CoreGuiService = pcall(function()
 end)
 
 local taskWait = (task and task.wait) or function() return wait() end
-
+local camNow = workspace.CurrentCamera
+local vpSize = (camNow and camNow.ViewportSize) or Vector2.new(1280, 720)
+if vpSize.X < 100 then vpSize = Vector2.new(1280, 720) end
+local UI_SCALE = math.min(vpSize.X / 1280, vpSize.Y / 720)
+if UI_SCALE <= 0 then UI_SCALE = 1 end
+local function S(v) return v * UI_SCALE end
+local function TS(v) return math.max(10, math.floor(v * UI_SCALE)) end
+Lib.S = S
+Lib.TS = TS
 local LocalPlayer = Players.LocalPlayer
 while not LocalPlayer do
     taskWait()
