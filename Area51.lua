@@ -65,22 +65,25 @@ if AUTO_ACCEPT and HostUI then
             Brand = GAME.Brand,
             Protocol = HostUI.BridgeProtocol or 2,
             Name = GAME.Name,
-            -- ✅ 弹性协议字段：声明抢占 Info 页
-            RequestedCategory = "Info", 
-            Priority = 90,              
-            Category = "Info",          
-            Sub = "Annc",
+            
+            -- ✅ 修复：严格匹配，去掉所有多余空格
+            RequestedCategory = "Info",  -- 匹配 "Info"
+            Priority = 90,               -- 优先级 90 (Info是100, ScriptHub是10)
+            Category = "Info",           
+            Sub = "Annc",                -- 匹配 "Annc" (UI库里是 "Annc "，gsub后会匹配)
             Mode = "Replace",
-            Focus = false,
+            Focus = true,                -- 自动聚焦
         })
     end)
+    
     if ok and success == true and type(bridgeOrErr) == "table" then
         Runtime.Mode = "Host"
         Runtime.Bridge = bridgeOrErr
         Runtime.Host = HostUI
         print("[RealYoHub] bridge obtained, Mode=Host")
     else
-        warn("[RealYoHub][ERR] RequestGameBridge: " .. tostring(ok and bridgeOrErr or success))
+        -- 打印详细错误方便调试
+        warn("[RealYoHub][ERR] RequestGameBridge Failed: " .. tostring(success) .. " | " .. tostring(bridgeOrErr))
     end
 end
 
