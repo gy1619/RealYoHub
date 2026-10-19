@@ -415,6 +415,7 @@ end
 RunService.RenderStepped:Connect(function() if ESP.Rainbow and UI.UIVisible then UpdatePreviewESP() end end)
 
 -- ✅ 页面构建
+-- ✅ 页面构建
 local home = ScrollOf(pages[1][1])
 MakeText(home, "Status: " .. License.Status, COL.Green)
 MakeButton(home, "Join Discord", function() setclipboard("https://discord.gg/SjRufjdF33") end)
@@ -429,9 +430,19 @@ MakeText(home, "Left time: " .. License.Remain, COL.Green)
 MakeText(home, "SZE internal", COL.Red)
 MakeText(home, "welcome, Scripts are temporarily free.", COL.TextDark)
 
+MakeSection(home, "Config Management")
+MakeButton(home, "Reset All Settings", function()
+    UI:ResetAllSettings()
+end)
+
 local sc12 = ScrollOf(pages[1][2])
 MakeSection(sc12, "Not yet")
 MakeText(sc12, "SZELON0 on top", COL.TextDim)
+
+-- ✅ 清空 Config 页面，变成提示
+local cfg = ScrollOf(pages[1][3])
+MakeSection(cfg, "Auto Save")
+MakeText(cfg, "settings automatically saved.", COL.Green)
 
 local cfg = ScrollOf(pages[1][3])
 MakeSection(cfg, "Config")
@@ -565,7 +576,6 @@ MakeText(script4, "Admin script", COL.TextDim)
 LoadAvatar()
 task.delay(2.5, UpdatePreviewESP)
 LocalPlayer.CharacterAdded:Connect(function() taskWait(2); LoadAvatar() end)
-if autoOn0 and autoName0 then task.delay(1, function() LoadConfig(autoName0) end) end
 taskWait(0.5)
 Toast("Loaded, HWID: " .. DEVICE_ID)
 taskWait(0.5)
