@@ -595,15 +595,38 @@ local function BuildFETools(A)
     end)
 end
 
+
+-- ✅ 定义完整性自检 (防粘贴截断/错位导致的 nil 调用)
+local function DefCheck()
+    local missing = {}
+    local function chk(n, v)
+        if type(v) ~= "function" then table.insert(missing, n) end
+    end
+    chk("SafeCall", SafeCall)
+    chk("FindHostUI", FindHostUI)
+    chk("Notify", Notify)
+    chk("BridgeAdapter", BridgeAdapter)
+    chk("BuildArea51", BuildArea51)
+    chk("BuildGunModded", BuildGunModded)
+    chk("BuildTeleport", BuildTeleport)
+    chk("BuildFETools", BuildFETools)
+    if #missing > 0 then
+        warn("[RealYoHub][FATAL] missing definitions: " .. table.concat(missing, ", "))
+        warn("[RealYoHub][FATAL] Area51.lua 上传截断或粘贴错位，请用 GitHub 的 Upload file / Replace 整文件重传，不要手机剪贴板分段粘")
+        return false
+    end
+    return true
+end
+
 -- ✅ 执行构建
-if Runtime.Mode == "Host" then
+if Runtime.Mode == "Host" and DefCheck() then
     local bridge = Runtime.Bridge
     SafeCall("Build Area51", function() bridge:UsePageIndex(1, 1, "Replace"); BuildArea51(BridgeAdapter(bridge)) end)
     SafeCall("Build GunModded", function() bridge:UsePageIndex(1, 2, "Replace"); BuildGunModded(BridgeAdapter(bridge)) end)
     SafeCall("Build Teleport", function() bridge:UsePageIndex(1, 3, "Replace"); BuildTeleport(BridgeAdapter(bridge)) end)
     SafeCall("Build FETools", function() bridge:UsePageIndex(1, 4, "Replace"); BuildFETools(BridgeAdapter(bridge)) end)
     SafeCall("Focus", function() bridge:Focus() end)
-    Notify("RealYoHub", "Handshake OK - hosted by RealYoUI", 6, "crown")
+    SafeCall("HandshakeToast", function() Notify("RealYoHub", "Handshake OK - hosted by RealYoUI", 6, "crown") end)
 else
-    warn("[RealYoHub] WindUI fallback removed. Please execute RealYoUI Host first.")
+    warn("[RealYoHub] not built. Mode=" .. tostring(Runtime.Mode) .. " (Host 未握手成功 或 DefCheck 失败，见上方 [FATAL])")
 end
