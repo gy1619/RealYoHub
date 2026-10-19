@@ -1,5 +1,4 @@
 -- area51.lua | RealYoHub (RealYoUI GameBridge auto-handshake) | FIX-BUILD 1
-print(">>> [Area51] script loaded (FIX-BUILD 1) <<<")
 
 local GAME = { Name = "RealYoHub Area51", Brand = "RealYoUI" }
 local Players = game:GetService("Players")
@@ -227,7 +226,7 @@ local function BuildGunModded(A)
     end
     watchContainer(LocalPlayer.Backpack)
     if LocalPlayer.Character then watchContainer(LocalPlayer.Character) end
-    LocalPlayer.CharacterAdded:Connect(function(ch) watchContainer(ch))end)
+    LocalPlayer.CharacterAdded:Connect(function(ch) watchContainer(ch)end)
 
     A:Section("Weapon Scanner")
     local list = rescan()
