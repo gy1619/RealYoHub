@@ -1,7 +1,6 @@
 -- RealYoUI.lua (Astool.lua)
--- RealYoUI Standalone UI Library + GameBridge Takeover Protocol V5.0 (Stable HWID & Nested Config)
 local Lib = {
-    Version = "5.0.0",
+    Version = "5.0.1",
     Brand = "RealYoUI",
     BridgeProtocol = 2,
     IsRealYoUI = true,
@@ -12,9 +11,7 @@ local CFG_DIR = "RealYo_Configs"
 local AUTO_FILE = CFG_DIR .. "/autoload.json"
 
 local function FileSupport()
-    return type(writefile) == "function"
-        and type(readfile) == "function"
-        and type(isfile) == "function"
+    return type(writefile) == "function" and type(readfile) == "function" and type(isfile) == "function"
 end
 
 local function EnsureFolder()
@@ -36,34 +33,24 @@ function Lib:DisplaceTab(highIndex, lowIndex)
         local dstScroll = self.GetScroll(lowIndex, subIdx)
         if srcScroll and dstScroll then
             for _, child in ipairs(dstScroll:GetChildren()) do
-                if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
-                    child:Destroy()
-                end
+                if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then child:Destroy() end
             end
             self:ClearFlowCache(dstScroll)
             for _, child in ipairs(srcScroll:GetChildren()) do
-                if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
-                    child.Parent = dstScroll
-                end
+                if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then child.Parent = dstScroll end
             end
             self:ClearFlowCache(srcScroll)
         end
     end
     local highName = self._mainNames[highIndex]
-    if self._sideButtons and self._sideButtons[lowIndex] then
-        self._sideButtons[lowIndex].Text = highName
-    end
+    if self._sideButtons and self._sideButtons[lowIndex] then self._sideButtons[lowIndex].Text = highName end
     self._mainNames[lowIndex] = highName
     if self._subNameSets[highIndex] and self._subNameSets[lowIndex] then
-        for k, v in pairs(self._subNameSets[highIndex]) do
-            self._subNameSets[lowIndex][k] = v
-        end
+        for k, v in pairs(self._subNameSets[highIndex]) do self._subNameSets[lowIndex][k] = v end
     end
     local highPri = CurrentTabPriorities[highIndex]
     CurrentTabPriorities[lowIndex] = highPri
-    if self._refreshTopNames and self._getCurrentMain then
-        self._refreshTopNames(self._getCurrentMain())
-    end
+    if self._refreshTopNames and self._getCurrentMain then self._refreshTopNames(self._getCurrentMain()) end
 end
 
 local Players = game:GetService("Players")
@@ -75,12 +62,9 @@ local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 
 local cloneref = cloneref or function(o) return o end
-
-local okCore, CoreGuiService = pcall(function()
-    return cloneref(game:GetService("CoreGui"))
-end)
-
+local okCore, CoreGuiService = pcall(function() return cloneref(game:GetService("CoreGui")) end)
 local taskWait = (task and task.wait) or function() return wait() end
+
 local camNow = workspace.CurrentCamera
 local vpSize = (camNow and camNow.ViewportSize) or Vector2.new(1280, 720)
 if vpSize.X < 100 then vpSize = Vector2.new(1280, 720) end
@@ -91,10 +75,7 @@ local function TS(v) return math.max(10, math.floor(v * UI_SCALE)) end
 Lib.S = S
 Lib.TS = TS
 local LocalPlayer = Players.LocalPlayer
-while not LocalPlayer do
-    taskWait()
-    LocalPlayer = Players.LocalPlayer
-end
+while not LocalPlayer do taskWait(); LocalPlayer = Players.LocalPlayer end
 
 local function Create(class, props, parent)
     local obj = Instance.new(class)
@@ -113,7 +94,6 @@ local COL = {
 }
 Lib.COL = COL
 
--- ✅✅✅ 优化 HWID 生成逻辑 (解决 Delta 天卡重置) ✅✅✅
 local function GetRobloxClientId()
     local ok, service = pcall(game.GetService, game, "RbxAnalyticsService")
     if ok and service then
@@ -129,12 +109,7 @@ local function GetInjectorHWID()
         local f = _G[fn]
         if type(f) == "function" then
             local ok, r = pcall(f)
-            if ok and r and type(r) == "string" and #r > 5 then
-                local lowerR = r:lower()
-                if not lowerR:find("session") and not lowerR:find("temp") and not lowerR:find("random") then
-                    return r
-                end
-            end
+            if ok and r and type(r) == "string" and #r > 5 then return r end
         end
     end
     return nil
@@ -163,20 +138,29 @@ end
 local RAW_HWID = GenerateUniqueHWID()
 local DEVICE_ID = AdvancedHash(RAW_HWID .. "RealYo_SZE_SALT_V1")
 Lib.DEVICE_ID = DEVICE_ID
--- ✅✅✅ HWID 优化结束 ✅✅✅
 
-local License = {
-    Mode = "open", Status = "Free",
-    Remain = "temporarily Keyless", BoundDevice = DEVICE_ID,
-}
+local License = { Mode = "open", Status = "Free", Remain = "temporarily Keyless", BoundDevice = DEVICE_ID }
 Lib.License = License
 
--- ✅✅✅ 优化 Config 系统 (支持分组/嵌套、自动保存) ✅✅✅
+-- ✅✅✅ 核心修改：Config 系统 (加入内存缓存 AutoSaveData 解决动态注入加载问题) ✅✅✅
 local SettingRegistry = {}
+local AutoSaveData = {}
 local autoSaveTask = nil
+local isResetting = false
 
 local function RegisterSetting(name, kind, get, set, group, default)
     table.insert(SettingRegistry, { name = name, kind = kind, get = get, set = set, group = group, default = default })
+    
+    -- ✅ 如果内存缓存中有该设置，立刻应用（解决 area51 后注入无法读取配置的问题）
+    local val = nil
+    if group and type(AutoSaveData[group]) == "table" then
+        val = AutoSaveData[group][name]
+    else
+        val = AutoSaveData[name]
+    end
+    if val ~= nil then
+        pcall(set, val)
+    end
 end
 Lib.RegisterSetting = RegisterSetting
 
@@ -189,55 +173,43 @@ function Lib:PurgeSettings(group)
 end
 
 local function TriggerAutoSave()
-    if type(writefile) ~= "function" then return end
+    if type(writefile) ~= "function" or isResetting then return end
+    -- ✅ 更新内存缓存
+    AutoSaveData = {}
+    for _, e in ipairs(SettingRegistry) do
+        local val = e.get()
+        if e.group then
+            if not AutoSaveData[e.group] then AutoSaveData[e.group] = {} end
+            AutoSaveData[e.group][e.name] = val
+        else
+            AutoSaveData[e.name] = val
+        end
+    end
+    
     if autoSaveTask then task.cancel(autoSaveTask) end
     autoSaveTask = task.delay(1.0, function()
-        local data = {}
-        for _, e in ipairs(SettingRegistry) do
-            local val = e.get()
-            if e.group then
-                if not data[e.group] then data[e.group] = {} end
-                data[e.group][e.name] = val
-            else
-                data[e.name] = val
-            end
-        end
         EnsureFolder()
-        pcall(function() writefile(CFG_DIR .. "/autosave.json", HttpService:JSONEncode(data)) end)
+        pcall(function() writefile(CFG_DIR .. "/autosave.json", HttpService:JSONEncode(AutoSaveData)) end)
     end)
 end
 
 function Lib:ResetAllSettings()
+    isResetting = true
+    if autoSaveTask then task.cancel(autoSaveTask); autoSaveTask = nil end
+    AutoSaveData = {}
+    
+    for _, e in ipairs(SettingRegistry) do
+        if e.default ~= nil then pcall(e.set, e.default) end
+    end
+    
     if type(delfile) == "function" and type(isfile) == "function" then
         if isfile(CFG_DIR .. "/autosave.json") then
             pcall(function() delfile(CFG_DIR .. "/autosave.json") end)
         end
     end
-    for _, e in ipairs(SettingRegistry) do
-        if e.default ~= nil then
-            pcall(e.set, e.default)
-        end
-    end
+    isResetting = false
     Toast("Auto-save cleared & reset to default")
 end
-
--- 旧版手动存档兼容保留
-local function ListConfigNames()
-    local names = {}
-    pcall(function()
-        if type(listfiles) == "function" then
-            for _, p in ipairs(listfiles(CFG_DIR)) do
-                local path = tostring(p):gsub("\\", "/")
-                local n = path:match("([^/]+)%.json$")
-                if n and n ~= "autoload" and n ~= "autosave" then
-                    table.insert(names, n)
-                end
-            end
-        end
-    end)
-    return names
-end
-Lib.ListConfigNames = ListConfigNames
 
 local ScreenGui = nil
 local ToastHolder = nil
@@ -256,6 +228,21 @@ local function Toast(msg)
     label:Destroy()
 end
 Lib.Toast = Toast
+
+local function ListConfigNames()
+    local names = {}
+    pcall(function()
+        if type(listfiles) == "function" then
+            for _, p in ipairs(listfiles(CFG_DIR)) do
+                local path = tostring(p):gsub("\\", "/")
+                local n = path:match("([^/]+)%.json$")
+                if n and n ~= "autoload" and n ~= "autosave" then table.insert(names, n) end
+            end
+        end
+    end)
+    return names
+end
+Lib.ListConfigNames = ListConfigNames
 
 local function SaveConfig(name)
     if not FileSupport() then Toast("fail") return end
@@ -581,18 +568,20 @@ local function MakeToggle(parent, text, default, cb, register, group)
         Text = text, TextColor3 = AP.Text, TextSize = TS(13), Font = Enum.Font.Gotham,
         TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = row,
     })
+    
+    -- ✅ 修复：保证 cb 每次都触发，但只在 fire 为 true 时保存
     local function apply(v, fire)
         v = v and true or false
         if v == state then return end
         state = v
         box.BackgroundColor3 = state and AP.Accent or offColor
-        if fire and cb then 
-            cb(state) 
-            TriggerAutoSave() 
-        end
+        if cb then cb(state) end
+        if fire then TriggerAutoSave() end
     end
     SafeClick(row, function() apply(not state, true) end)
-    if register then RegisterSetting(text, "toggle", function() return state end, function(v) apply(v, true) end, group, default) end
+    
+    -- ✅ 传入 apply(v, false)，避免初始化加载配置时触发无意义的自动保存
+    if register then RegisterSetting(text, "toggle", function() return state end, function(v) apply(v, false) end, group, default) end
     return row
 end
 
@@ -631,16 +620,15 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
     local currentVal = default
     local dragging = false
     
+    -- ✅ 修复：保证 cb 每次都触发，但只在 fire 为 true 时保存
     local function setRatio(r, fire)
         r = math.clamp(r, 0, 1)
         fill.Size = UDim2.new(r, 0, 1, 0)
         knob.Position = UDim2.new(r, -S(6), 0.5, -S(6))
         currentVal = math.floor(min + (max - min) * r + 0.5)
         valBtn.Text = tostring(currentVal)
-        if fire and cb then 
-            cb(currentVal) 
-            TriggerAutoSave() 
-        end
+        if cb then cb(currentVal) end
+        if fire then TriggerAutoSave() end
     end
     
     local function updateFromX(x, fire)
@@ -692,11 +680,12 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
         end
     end)
     
+    -- ✅ 传入 setRatio(..., false)，避免初始化加载配置时触发无意义的自动保存
     RegisterSetting(text, "slider", function() return currentVal end, function(v)
         v = tonumber(v) or default
         if v > max then max = v end 
         v = math.clamp(v, min, max)
-        setRatio((v - min) / (max - min), true)
+        setRatio((v - min) / (max - min), false)
     end, group, default)
 end
 
@@ -1116,7 +1105,7 @@ function Lib:Initialize(opts)
     local BallRing = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Parent = Ball }); AddCorner(BallRing, ballSize / 2)
     local ringStroke = Create("UIStroke", { Thickness = math.max(2, S(3)), Color = COL.White }, BallRing)
     local ringGrad = Create("UIGradient", { Rotation = 0, Color = RAINBOW_SEQ }, ringStroke); table.insert(rainbowGrads, ringGrad)
-    ringGrad:SetAttribute("IsBallRing", true) 
+    ringGrad:SetAttribute("IsBallRing", true)
     local discOuter = Create("Frame", { Size = UDim2.fromOffset(ballSize * 0.76, ballSize * 0.76), Position = UDim2.new(0.5, -ballSize * 0.38, 0.5, -ballSize * 0.38), BackgroundColor3 = Color3.fromRGB(110, 220, 70), Parent = Ball }); AddCorner(discOuter, ballSize)
     local discMid = Create("Frame", { Size = UDim2.fromOffset(ballSize * 0.52, ballSize * 0.52), Position = UDim2.new(0.5, -ballSize * 0.26, 0.5, -ballSize * 0.26), BackgroundColor3 = Color3.fromRGB(200, 230, 60), Parent = Ball }); AddCorner(discMid, ballSize)
     local discCore = Create("Frame", { Size = UDim2.fromOffset(ballSize * 0.26, ballSize * 0.26), Position = UDim2.new(0.5, -ballSize * 0.13, 0.5, -ballSize * 0.13), BackgroundColor3 = Color3.fromRGB(240, 90, 40), Parent = Ball }); AddCorner(discCore, ballSize)
@@ -1160,26 +1149,25 @@ function Lib:Initialize(opts)
         return sc
     end
     
-    -- ✅ 自动加载 autosave.json
+    -- ✅ 自动加载 autosave.json (同步加载到 AutoSaveData 内存缓存)
     local targetCFG = CFG_DIR or "RealYo_Configs"
     if type(isfile) == "function" and isfile(targetCFG .. "/autosave.json") then
-        task.delay(0.2, function()
-            local ok, raw = pcall(readfile, targetCFG .. "/autosave.json")
-            if ok and raw then
-                local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
-                if ok2 and type(data) == "table" then
-                    for _, e in ipairs(SettingRegistry) do
-                        local val = nil
-                        if e.group and type(data[e.group]) == "table" then
-                            val = data[e.group][e.name]
-                        else
-                            val = data[e.name]
-                        end
-                        if val ~= nil then pcall(e.set, val) end
+        local ok, raw = pcall(readfile, targetCFG .. "/autosave.json")
+        if ok and raw then
+            local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
+            if ok2 and type(data) == "table" then
+                AutoSaveData = data
+                for _, e in ipairs(SettingRegistry) do
+                    local val = nil
+                    if e.group and type(data[e.group]) == "table" then
+                        val = data[e.group][e.name]
+                    else
+                        val = data[e.name]
                     end
+                    if val ~= nil then pcall(e.set, val) end
                 end
             end
-        end)
+        end
     end
     self.Initialized = true
     return self
@@ -1194,7 +1182,6 @@ local function FindPageIndices(category, sub)
     sub = Trim(sub)
 
     local mNames = Lib._mainNames or { "Info", "ESP", "FE", "ScriptHub" }
-
     local sSets = Lib._subNameSets or {
         { "Annc", "Other", "Config", "Theme" },
         { "ESP", "Nor yet", "Not yet", "Not yet" },
@@ -1205,15 +1192,11 @@ local function FindPageIndices(category, sub)
     for m, mn in ipairs(mNames) do
         if Trim(mn) == category then
             for j, sn in ipairs(sSets[m] or {}) do
-                if Trim(sn) == sub then
-                    return m, j
-                end
+                if Trim(sn) == sub then return m, j end
             end
-
             return m, nil
         end
     end
-
     return nil, nil
 end
 
@@ -1221,26 +1204,17 @@ local BridgeMeta = {}
 BridgeMeta.__index = BridgeMeta
 function BridgeMeta:UsePageIndex(m, j, mode)
     mode = Trim(mode or "Replace")
-
     local scroll = self.UI.GetScroll(m, j)
-    if not scroll then
-        return false, "page_not_ready"
-    end
-
+    if not scroll then return false, "page_not_ready" end
     if mode ~= "Append" then
         for _, c in ipairs(scroll:GetChildren()) do
-            if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then
-                c:Destroy()
-            end
+            if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
         end
-
         self.UI:ClearFlowCache(scroll)
     end
-
     self.Host = scroll
     self.MainIndex = m
     self.SubIndex = j
-
     return true
 end
 function BridgeMeta:Focus()
