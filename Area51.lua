@@ -227,7 +227,7 @@ local function BuildGunModded(A)
     end
     watchContainer(LocalPlayer.Backpack)
     if LocalPlayer.Character then watchContainer(LocalPlayer.Character) end
-    LocalPlayer.CharacterAdded:Connect(function(ch) watchContainer(ch))
+    LocalPlayer.CharacterAdded:Connect(function(ch) watchContainer(ch))end)
 
     A:Section("Weapon Scanner")
     local list = rescan()
