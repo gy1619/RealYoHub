@@ -1,19 +1,19 @@
 -- RealYoUI.lua (Astool.lua)
--- RealYoUI Standalone UI Library + GameBridge Takeover Protocol V4.5 (Optimized HWID)
+-- RealYoUI Standalone UI Library + GameBridge Takeover Protocol V5.0 (Stable HWID & Nested Config)
 local Lib = {
-    Version = "4.5.0",
+    Version = "5.0.0",
     Brand = "RealYoUI",
     BridgeProtocol = 2,
     IsRealYoUI = true,
     Initialized = false,
 }
--- ✅ 新增：Tab 优先级协议
+
+-- ✅ 核心：Tab 优先级协议
 local TabDefaultPriorities = { ["Info"] = 100, ["ESP"] = 80, ["FE"] = 60, ["ScriptHub"] = 10 }
-local CurrentTabPriorities = { 100, 80, 60, 10 } -- 对应 Index 1, 2, 3, 4
--- ✅ 新增：偷梁换柱核心函数 (将高优先级 Tab 的内容移动到最低优先级 Tab)
+local CurrentTabPriorities = { 100, 80, 60, 10 }
+
 function Lib:DisplaceTab(highIndex, lowIndex)
     if highIndex == lowIndex then return end
-    -- 1. 移动 GUI 元素 (遍历 4 个子页面)
     for subIdx = 1, 4 do
         local srcScroll = self.GetScroll(highIndex, subIdx)
         local dstScroll = self.GetScroll(lowIndex, subIdx)
@@ -27,26 +27,23 @@ function Lib:DisplaceTab(highIndex, lowIndex)
             self:ClearFlowCache(dstScroll)
         end
     end
-    -- 2. 更新名称和路由表 (把高优先级的名字给低优先级，因为内容移过去了)
     local highName = self._mainNames[highIndex]
     if self._sideButtons and self._sideButtons[lowIndex] then
         self._sideButtons[lowIndex].Text = highName
     end
-    self._mainNames[lowIndex] = highName -- 更新内部名称记录
+    self._mainNames[lowIndex] = highName
     if self._subNameSets[highIndex] and self._subNameSets[lowIndex] then
         for k, v in pairs(self._subNameSets[highIndex]) do
             self._subNameSets[lowIndex][k] = v
         end
     end
-    -- 3. 交换优先级记录
     local highPri = CurrentTabPriorities[highIndex]
     CurrentTabPriorities[lowIndex] = highPri
-    -- highIndex 的优先级稍后由游戏脚本接管时重新设定
-    -- 4. 刷新 UI (如果当前正好在 lowIndex 页面)
     if self._refreshTopNames and self._getCurrentMain and self._getCurrentMain() == lowIndex then
         self._refreshTopNames(lowIndex)
     end
 end
+
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
@@ -67,6 +64,7 @@ local function S(v) return v * UI_SCALE end
 local function TS(v) return math.max(10, math.floor(v * UI_SCALE)) end
 Lib.S = S
 Lib.TS = TS
+
 local function Create(class, props, parent)
     local obj = Instance.new(class)
     for k, v in pairs(props or {}) do obj[k] = v end
@@ -76,6 +74,7 @@ end
 Lib.Create = Create
 local function AddCorner(parent, r) return Create("UICorner", { CornerRadius = UDim.new(0, r) }, parent) end
 Lib.AddCorner = AddCorner
+
 local COL = {
     TextDark = Color3.fromRGB(70, 70, 70), TextDim = Color3.fromRGB(110, 110, 110),
     Red = Color3.fromRGB(215, 60, 60), Green = Color3.fromRGB(50, 190, 90),
@@ -83,28 +82,23 @@ local COL = {
 }
 Lib.COL = COL
 
--- ✅✅✅ 核心优化：HWID 生成逻辑重构 (解决 Delta 天卡重置问题) ✅✅✅
+-- ✅✅✅ 优化 HWID 生成逻辑 (解决 Delta 天卡重置) ✅✅✅
 local function GetRobloxClientId()
-    -- 优先级 1：获取 Roblox 客户端设备 ID (最稳定，与设备绑定，不受注入器 Session 影响)
     local ok, service = pcall(game.GetService, game, "RbxAnalyticsService")
     if ok and service then
         local ok2, id = pcall(service.GetClientId, service)
-        if ok2 and id and type(id) == "string" and #id > 5 then
-            return id
-        end
+        if ok2 and id and type(id) == "string" and #id > 5 then return id end
     end
     return nil
 end
 
 local function GetInjectorHWID()
-    -- 优先级 2：尝试注入器 API (作为备选，但增加过滤防止临时 ID)
-    local cands = { "gethwid", "get_hwid", "GetHwid", "gethardwareid", "get_sha1", "get_machine_id", "get_android_id" }
+    local cands = { "gethwid", "get_hwid", "GetHwid", "gethardwareid", "get_sha1", "get_machine_id" }
     for _, fn in ipairs(cands) do
         local f = _G[fn]
         if type(f) == "function" then
             local ok, r = pcall(f)
             if ok and r and type(r) == "string" and #r > 5 then
-                -- 过滤掉明显的临时 Session ID
                 local lowerR = r:lower()
                 if not lowerR:find("session") and not lowerR:find("temp") and not lowerR:find("random") then
                     return r
@@ -115,45 +109,26 @@ local function GetInjectorHWID()
     return nil
 end
 
-local function GetSystemFingerprint()
-    -- 优先级 3：系统硬件指纹 (降级方案)
-    local ok, sys = pcall(SystemInfo)
-    if ok and sys then
-        return (sys.GpuName or "nogpu") .. "|" .. (sys.OsPlatform or "nos") .. "|" .. (sys.CpuName or "nocpu")
-    end
-    return nil
-end
-
 local function GenerateUniqueHWID()
-    -- 生成原始设备标识符
     local raw = GetRobloxClientId()
-    if raw then return "R_" .. raw end -- R_ 前缀表示 Roblox 原生 ID
-    
+    if raw then return "R_" .. raw end
     raw = GetInjectorHWID()
-    if raw then return "I_" .. raw end -- I_ 前缀表示注入器 ID
-    
-    raw = GetSystemFingerprint()
-    if raw then return "S_" .. raw end -- S_ 前缀表示系统指纹
-    
-    -- 最终降级：使用 UserId (如果以上都失败，至少保证唯一性，但换号会变)
+    if raw then return "I_" .. raw end
     return "U_" .. tostring(LocalPlayer.UserId)
 end
 
 local function AdvancedHash(str)
-    -- 增强型哈希算法 (FNV-1a + 混淆)，生成 16 位高强度唯一码
     local h1 = 0x811c9dc5
     local h2 = 0x9e3779b9
     for i = 1, #str do
         local byte = string.byte(str, i)
-        h1 = (h1 ~ byte) * 0x01000193 % 0x100000000 -- FNV-1a 乘法
-        h2 = (h2 + byte) * 0x9e3779b9 % 0x100000000 -- 加法哈希
+        h1 = (h1 ~ byte) * 0x01000193 % 0x100000000
+        h2 = (h2 + byte) * 0x9e3779b9 % 0x100000000
     end
-    -- 混合两个哈希值
     local final = (h1 * 2654435761 + h2) % 0x100000000
     return string.format("%08X%08X", h1, final)
 end
 
--- 生成最终 DEVICE_ID (加盐防止彩虹表破解)
 local RAW_HWID = GenerateUniqueHWID()
 local DEVICE_ID = AdvancedHash(RAW_HWID .. "RealYo_SZE_SALT_V1")
 Lib.DEVICE_ID = DEVICE_ID
@@ -164,11 +139,14 @@ local License = {
     Remain = "temporarily Keyless", BoundDevice = DEVICE_ID,
 }
 Lib.License = License
+
+-- ✅✅✅ 优化 Config 系统 (支持分组/嵌套) ✅✅✅
 local SettingRegistry = {}
-local function RegisterSetting(name, kind, get, set)
-    table.insert(SettingRegistry, { name = name, kind = kind, get = get, set = set })
+local function RegisterSetting(name, kind, get, set, group)
+    table.insert(SettingRegistry, { name = name, kind = kind, get = get, set = set, group = group })
 end
 Lib.RegisterSetting = RegisterSetting
+
 local CFG_DIR = "RealYo_Configs"
 local AUTO_FILE = CFG_DIR .. "/autoload.json"
 local function FileSupport() return type(writefile) == "function" and type(readfile) == "function" and type(isfile) == "function" end
@@ -186,6 +164,7 @@ local function ListConfigNames()
     return names
 end
 Lib.ListConfigNames = ListConfigNames
+
 local ScreenGui = nil
 local ToastHolder = nil
 local function Toast(msg)
@@ -203,15 +182,25 @@ local function Toast(msg)
     label:Destroy()
 end
 Lib.Toast = Toast
+
 local function SaveConfig(name)
     if not FileSupport() then Toast("fail") return end
     local data = {}
-    for _, e in ipairs(SettingRegistry) do data[e.name] = e.get() end
+    for _, e in ipairs(SettingRegistry) do
+        local val = e.get()
+        if e.group then
+            if not data[e.group] then data[e.group] = {} end
+            data[e.group][e.name] = val
+        else
+            data[e.name] = val
+        end
+    end
     EnsureFolder()
     local ok = pcall(function() writefile(CFG_DIR .. "/" .. name .. ".json", HttpService:JSONEncode(data)) end)
     Toast(ok and ("saved: " .. name) or "fail")
 end
 Lib.SaveConfig = SaveConfig
+
 local function LoadConfig(name)
     if not FileSupport() then Toast("fail") return end
     local path = CFG_DIR .. "/" .. name .. ".json"
@@ -219,17 +208,28 @@ local function LoadConfig(name)
     if not ok or not raw then Toast("not found: " .. name) return end
     local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
     if not ok2 or type(data) ~= "table" then Toast("config broke: " .. name) return end
+    
     local count = 0
-    for _, e in ipairs(SettingRegistry) do if data[e.name] ~= nil then e.set(data[e.name]); count = count + 1 end end
-    Toast(("config readed: %s (%d项)"):format(name, count))
+    for _, e in ipairs(SettingRegistry) do
+        local val = nil
+        if e.group and type(data[e.group]) == "table" then
+            val = data[e.group][e.name]
+        else
+            val = data[e.name]
+        end
+        if val ~= nil then e.set(val); count = count + 1 end
+    end
+    Toast(("config readed: %s (%d items)"):format(name, count))
 end
 Lib.LoadConfig = LoadConfig
+
 local function DeleteConfig(name)
     if not FileSupport() then Toast("fail") return end
     local ok = pcall(function() if isfile(CFG_DIR .. "/" .. name .. ".json") then delfile(CFG_DIR .. "/" .. name .. ".json") end end)
     Toast(ok and ("deleted: " .. name) or "fail")
 end
 Lib.DeleteConfig = DeleteConfig
+
 local function GetAutoLoad()
     local ok, raw = pcall(function() if not isfile(AUTO_FILE) then return nil end return readfile(AUTO_FILE) end)
     if not ok or not raw then return false, nil end
@@ -238,12 +238,14 @@ local function GetAutoLoad()
     return false, nil
 end
 Lib.GetAutoLoad = GetAutoLoad
+
 local function SetAutoLoad(enabled, name)
     if not FileSupport() then Toast("fail") return end
     EnsureFolder()
     pcall(function() writefile(AUTO_FILE, HttpService:JSONEncode({ enabled = enabled, name = name })) end)
 end
 Lib.SetAutoLoad = SetAutoLoad
+
 local rainbowGrads = {}
 local rainbowT0 = tick()
 local RAINBOW_SEQ = ColorSequence.new({
@@ -251,6 +253,7 @@ local RAINBOW_SEQ = ColorSequence.new({
     ColorSequenceKeypoint.new(0.50, Color3.fromRGB(90, 255, 130)), ColorSequenceKeypoint.new(0.75, Color3.fromRGB(90, 170, 255)),
     ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 90, 255)),
 })
+
 local function AddRainbowStroke(parent, thickness, glow)
     local stroke = Create("UIStroke", { Thickness = thickness or math.max(1, S(1.5)), Color = COL.White }, parent)
     local grad = Create("UIGradient", { Rotation = 25, Color = RAINBOW_SEQ }, stroke)
@@ -265,16 +268,19 @@ local function AddRainbowStroke(parent, thickness, glow)
     end
     return stroke
 end
+
 local function AddRainbowBar(parent)
     local bar = Create("Frame", { Size = UDim2.new(1, 0, 0, math.max(1, S(2))), BackgroundColor3 = COL.White, Parent = parent })
     local grad = Create("UIGradient", { Rotation = 0, Color = RAINBOW_SEQ }, bar)
     table.insert(rainbowGrads, grad)
     return bar
 end
+
 local function AddGlass(parent)
     parent.BackgroundColor3 = COL.White
     parent.BackgroundTransparency = 0.45
 end
+
 local function SafeClick(obj, cb)
     local down, moved, startPos = false, false, nil
     obj.InputBegan:Connect(function(inp)
@@ -294,10 +300,12 @@ local function SafeClick(obj, cb)
     end)
 end
 Lib.SafeClick = SafeClick
+
 local UIVisible = false
 Lib.UIVisible = UIVisible
 local panelList = {}
 local panelDrag = nil
+
 UserInputService.InputChanged:Connect(function(inp)
     if panelDrag and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
         local d = inp.Position - panelDrag.start
@@ -307,9 +315,11 @@ UserInputService.InputChanged:Connect(function(inp)
         f.Position = UDim2.fromOffset(nx, ny)
     end
 end)
+
 UserInputService.InputEnded:Connect(function(inp)
     if panelDrag and (inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch) then panelDrag = nil end
 end)
+
 local function MakeDragHandle(panel, size, position)
     local handle = Create("Frame", { Size = size, Position = position, BackgroundTransparency = 1, Parent = panel, ZIndex = 4 })
     handle.InputBegan:Connect(function(inp)
@@ -319,6 +329,7 @@ local function MakeDragHandle(panel, size, position)
     end)
     return handle
 end
+
 local sideW = S(150)
 local sidePad, sideBtnH, sideGap = S(6), S(40), S(6)
 local mainNames = { "Info", "ESP", "FE", "ScriptHub" }
@@ -331,12 +342,14 @@ local startX = (vpSize.X - totalW) / 2
 local sideY = (vpSize.Y - sideH) / 2
 local mainY = (vpSize.Y - mainH) / 2
 local rightY = (vpSize.Y - rightH) / 2
+
 local subNameSets = {
     { "Annc", "Other", "Config", "Theme" },
     { "ESP", "Nor yet", "Not yet", "Not yet" },
     { "Movement", "Character", "World", "Practical" },
     { "RealYoHub", "Keyless Script", "Keys Script", "Admin" },
 }
+
 local function EstW(text, size)
     size = size or TS(13)
     local s = tostring(text)
@@ -344,6 +357,7 @@ local function EstW(text, size)
     for i = 1, bytes do if string.byte(s, i) > 127 then cjk = cjk + 1 end end
     return (cjk / 3) * size * 1.05 + (bytes - cjk) * size * 0.7 + S(4)
 end
+
 local flowByScroll = {}
 local function FlowOf(scroll)
     local flow = flowByScroll[scroll]
@@ -404,6 +418,7 @@ function Lib:ClearFlowCache(scroll) flowByScroll[scroll] = nil end
 local function AsFlow(parent) return (type(parent) == "table" and parent.Add) and parent or FlowOf(parent) end
 local function CreateGrid(scroll) return FlowOf(scroll) end
 Lib.CreateGrid = CreateGrid
+
 local function MakeText(parent, text, color, size)
     local slot = AsFlow(parent).AddFull((size or TS(13)) + S(6))
     local l = Create("TextLabel", {
@@ -414,6 +429,7 @@ local function MakeText(parent, text, color, size)
     })
     return l
 end
+
 local function MakeSection(parent, text)
     local flow = AsFlow(parent)
     local had = flow._used
@@ -431,6 +447,7 @@ local function MakeSection(parent, text)
     })
     return l
 end
+
 local AP = {
     Panel = Color3.fromRGB(255, 255, 255), PanelT = 0.45, Comp = Color3.fromRGB(255, 255, 255), CompT = 0.35,
     Text = Color3.fromRGB(70, 70, 70), Dim = Color3.fromRGB(110, 110, 110), Accent = Color3.fromRGB(215, 60, 60),
@@ -444,6 +461,7 @@ local Themes = {
     ["Cyber"] = { Panel = Color3.fromRGB(12,12,18), PanelT = 0.1, Comp = Color3.fromRGB(30,40,45), CompT = 0.15, Text = Color3.fromRGB(200,255,240), Dim = Color3.fromRGB(110,160,150), Accent = Color3.fromRGB(0,255,200), Stroke = Color3.fromRGB(0,180,150), BorderRainbow = false, Border = Color3.fromRGB(0,255,200) },
     ["Vampire"] = { Panel = Color3.fromRGB(28,12,18), PanelT = 0.1, Comp = Color3.fromRGB(60,25,35), CompT = 0.15, Text = Color3.fromRGB(255,225,230), Dim = Color3.fromRGB(190,120,130), Accent = Color3.fromRGB(230,45,70), Stroke = Color3.fromRGB(180,60,80), BorderRainbow = false, Border = Color3.fromRGB(230,45,70) },
 }
+
 local function MakeButton(parent, text, cb)
     local host = AsFlow(parent).Add(math.max(S(40) + EstW(text, TS(12)), S(90)), S(28))
     local btn = Create("TextButton", {
@@ -456,6 +474,7 @@ local function MakeButton(parent, text, cb)
     SafeClick(btn, function() if cb then cb() end end)
     return btn
 end
+
 local function MakeTextBox(parent, placeholder, default)
     local host = AsFlow(parent).Add(S(200), S(28))
     local box = Create("TextBox", {
@@ -467,7 +486,8 @@ local function MakeTextBox(parent, placeholder, default)
     Create("UIStroke", { Thickness = 1, Color = Color3.fromRGB(160, 160, 160), Transparency = 0.4 }, box)
     return box
 end
-local function MakeToggle(parent, text, default, cb, register)
+
+local function MakeToggle(parent, text, default, cb, register, group)
     if register == nil then register = true end
     local host = AsFlow(parent).Add(S(36) + EstW(text) + S(10), S(28))
     local state = default and true or false
@@ -491,10 +511,11 @@ local function MakeToggle(parent, text, default, cb, register)
         if fire and cb then cb(state) end
     end
     SafeClick(row, function() apply(not state, true) end)
-    if register then RegisterSetting(text, "toggle", function() return state end, function(v) apply(v, true) end) end
+    if register then RegisterSetting(text, "toggle", function() return state end, function(v) apply(v, true) end, group) end
     return row
 end
-local function MakeSlider(parent, text, min, max, default, cb)
+
+local function MakeSlider(parent, text, min, max, default, cb, group)
     local row = AsFlow(parent).Add(S(252), S(30))
     local desc = Create("TextLabel", {
         Size = UDim2.fromOffset(S(92), S(16)), Position = UDim2.new(0, 0, 0.5, -S(8)), BackgroundTransparency = 1,
@@ -551,8 +572,9 @@ local function MakeSlider(parent, text, min, max, default, cb)
     RegisterSetting(text, "slider", function() return currentVal end, function(v)
         v = math.clamp(tonumber(v) or default, min, max)
         setRatio((v - min) / (max - min), true)
-    end)
+    end, group)
 end
+
 local openDropdown = nil
 local function CloseDropdown() if openDropdown then openDropdown.Visible = false; openDropdown = nil end end
 UserInputService.InputBegan:Connect(function(inp)
@@ -561,6 +583,7 @@ UserInputService.InputBegan:Connect(function(inp)
         if p.X < lp.X or p.X > lp.X + ls.X or p.Y < lp.Y or p.Y > lp.Y + ls.Y then CloseDropdown() end
     end
 end)
+
 local function MakeDropdown(parent, text, options, default, cb)
     local row = AsFlow(parent).Add(S(150) + EstW(text, TS(12)) + S(16), S(30))
     local btn = Create("TextButton", {
@@ -609,6 +632,7 @@ local function MakeDropdown(parent, text, options, default, cb)
     end)
     return handle
 end
+
 local function TagObj(d)
     if d:GetAttribute("role") then return end
     if d:IsA("UIStroke") then d:SetAttribute("role", d:FindFirstChildOfClass("UIGradient") and "rainbow" or "stroke"); return end
@@ -629,6 +653,7 @@ local function TagObj(d)
         elseif bg == ORIG.Accent and d:IsA("Frame") and d.AbsoluteSize.X > S(40) then d:SetAttribute("role", "accentbg") end
     end
 end
+
 local function ApplyObj(d)
     local role = d:GetAttribute("role")
     if role == "panel" then d.BackgroundColor3 = AP.Panel; d.BackgroundTransparency = AP.PanelT
@@ -640,6 +665,7 @@ local function ApplyObj(d)
     elseif role == "stroke" then d.Color = AP.Stroke
     elseif role == "rainbow" then local g = d:FindFirstChildOfClass("UIGradient"); if g then if AP.BorderRainbow then g.Color = RAINBOW_SEQ else g.Color = ColorSequence.new(AP.Border, AP.Border) end end end
 end
+
 local function ApplyAll()
     pcall(function()
         for _, p in ipairs(panelList) do p.BackgroundColor3 = AP.Panel; p.BackgroundTransparency = AP.PanelT end
@@ -651,6 +677,7 @@ end
 local apDirty = false
 RunService.Heartbeat:Connect(function() if apDirty then apDirty = false; ApplyAll() end end)
 local function QueueApply() apDirty = true end
+
 local function ApplyTheme(name)
     local t = Themes[name]
     if not t then return end
@@ -659,6 +686,7 @@ local function ApplyTheme(name)
     QueueApply()
     Toast("Theme: " .. name)
 end
+
 local function SetTargetColor(target, col)
     if target == "UI bottom" then AP.Panel = col; AP.PanelT = 0.1
     elseif target == "package" then AP.Comp = col; AP.CompT = 0.15
@@ -668,6 +696,7 @@ local function SetTargetColor(target, col)
     elseif target == "frame" then AP.Border = col; AP.BorderRainbow = false end
     QueueApply()
 end
+
 local function ApplyFont(fontName)
     local f = Enum.Font[fontName]
     if not f then return end
@@ -678,6 +707,7 @@ local function ApplyFont(fontName)
     end
     Toast("font: " .. fontName)
 end
+
 local pickerTarget = "UI bottom"
 local pickerInfoLabel = nil
 local function MakeColorPicker(parent)
@@ -758,6 +788,7 @@ local function MakeColorPicker(parent)
     render()
     return holder
 end
+
 local function MakeInlineAlphaSlider(flow)
     local row = flow.Add(S(210), S(20))
     local lab = Create("TextLabel", {
@@ -798,10 +829,12 @@ local function MakeInlineAlphaSlider(flow)
         if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then drag = false end
     end)
 end
+
 local pages = {}
 Lib.pages = pages
 local EASE = TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 local currentPage = nil
+
 local function SlideToPage(newPage, dirX, dirY)
     if currentPage == newPage then return end
     local old = currentPage; currentPage = newPage
@@ -814,6 +847,7 @@ local function SlideToPage(newPage, dirX, dirY)
         task.delay(0.32, function() oldRef.Visible = false; oldRef.Position = UDim2.fromOffset(0, 0) end)
     end
 end
+
 local AvatarWorld = nil
 Lib.AvatarWorld = AvatarWorld
 local function LoadAvatar()
@@ -831,6 +865,7 @@ local function LoadAvatar()
     end)
 end
 Lib.LoadAvatar = LoadAvatar
+
 local SetUIVisible
 function Lib:Initialize(opts)
     if self.Initialized then return self end
@@ -976,6 +1011,7 @@ function Lib:Initialize(opts)
     self.Initialized = true
     return self
 end
+
 local function FindPageIndices(category, sub)
     category = tostring(category):gsub("%s+", " ")
     sub = tostring(sub):gsub("%s+", " ")
@@ -996,6 +1032,7 @@ local function FindPageIndices(category, sub)
     end
     return nil, nil
 end
+
 local BridgeMeta = {}
 BridgeMeta.__index = BridgeMeta
 function BridgeMeta:UsePageIndex(m, j, mode)
@@ -1039,6 +1076,7 @@ function BridgeMeta:Create(comp)
     local host = comp.Host or self.Host
     local text = comp.Text or comp.text or " "
     local cb = comp.Callback or comp.callback or comp.OnClick or comp.OnChange
+    local group = comp.Group
     if kind == "Label" or kind == "Text" then
         return self.UI.MakeText(host, text, comp.Color or self.UI.COL.TextDark, comp.Size)
     elseif kind == "Section" then
@@ -1046,9 +1084,9 @@ function BridgeMeta:Create(comp)
     elseif kind == "Button" then
         return self.UI.MakeButton(host, text, cb)
     elseif kind == "Toggle" then
-        return self.UI.MakeToggle(host, text, comp.Default or false, cb, comp.Register)
+        return self.UI.MakeToggle(host, text, comp.Default or false, cb, comp.Register, group)
     elseif kind == "Slider" then
-        return self.UI.MakeSlider(host, text, comp.Min or 0, comp.Max or 100, comp.Default or comp.Min or 0, cb)
+        return self.UI.MakeSlider(host, text, comp.Min or 0, comp.Max or 100, comp.Default or comp.Min or 0, cb, group)
     elseif kind == "Dropdown" then
         local opts = comp.Options or {}
         return self.UI.MakeDropdown(host, text, opts, comp.Default or opts[1], cb)
@@ -1062,10 +1100,11 @@ end
 function BridgeMeta:Label(text, opts) opts = opts or {}; return self:Create({ Type = "Label", Text = text, Color = opts.Color, Size = opts.Size, Host = opts.Host }) end
 function BridgeMeta:Section(text, opts) opts = opts or {}; return self:Create({ Type = "Section", Text = text, Host = opts.Host }) end
 function BridgeMeta:Button(text, cb, opts) opts = opts or {}; return self:Create({ Type = "Button", Text = text, Callback = cb, Host = opts.Host }) end
-function BridgeMeta:Toggle(text, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Toggle", Text = text, Default = default, Callback = cb, Register = opts.Register, Host = opts.Host }) end
-function BridgeMeta:Slider(text, min, max, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Slider", Text = text, Min = min, Max = max, Default = default, Callback = cb, Host = opts.Host }) end
+function BridgeMeta:Toggle(text, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Toggle", Text = text, Default = default, Callback = cb, Register = opts.Register, Host = opts.Host, Group = opts.Group }) end
+function BridgeMeta:Slider(text, min, max, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Slider", Text = text, Min = min, Max = max, Default = default, Callback = cb, Host = opts.Host, Group = opts.Group }) end
 function BridgeMeta:Dropdown(text, options, default, cb, opts) opts = opts or {}; return self:Create({ Type = "Dropdown", Text = text, Options = options, Default = default, Callback = cb, Host = opts.Host }) end
 function BridgeMeta:TextBox(placeholder, default, opts) opts = opts or {}; return self:Create({ Type = "TextBox", Placeholder = placeholder, Default = default, Host = opts.Host }) end
+
 function Lib:RenameMain(i, newName)
     if Lib._sideButtons and Lib._sideButtons[i] then
         Lib._sideButtons[i].Text = newName
@@ -1083,6 +1122,7 @@ function Lib:RenameSub(m, j, newName)
     end
     return false
 end
+
 function Lib:RequestGameBridge(payload)
     payload = payload or {}
     if payload.Brand ~= self.Brand then return false, "brand_mismatch" end
@@ -1092,12 +1132,9 @@ function Lib:RequestGameBridge(payload)
     local sub = tostring(payload.Sub or "RealYoHub"):gsub("%s+", " ")
     local m, j = FindPageIndices(requestedCat, sub)
     if not m or not j then return false, "page_not_found: " .. requestedCat .. "/" .. sub end
-    -- ✅ 弹性替换逻辑：优先级仲裁
-    local gamePriority = tonumber(payload.Priority) or 50 -- 游戏脚本默认优先级 50
+    local gamePriority = tonumber(payload.Priority) or 50
     local targetIndex = m
-    -- 如果目标 Tab 当前优先级 >= 游戏脚本优先级 (说明游戏脚本想抢占高优先级位置)
     if CurrentTabPriorities[targetIndex] >= gamePriority then
-        -- 寻找当前所有 Tab 中优先级最低的
         local lowestIndex = 1
         local lowestPri = CurrentTabPriorities[1]
         for i = 2, 4 do
@@ -1106,14 +1143,11 @@ function Lib:RequestGameBridge(payload)
                 lowestIndex = i
             end
         end
-        -- 如果最低优先级的不是目标位置，执行偷梁换柱
         if lowestIndex ~= targetIndex then
             self:DisplaceTab(targetIndex, lowestIndex)
         end
     end
-    -- 更新目标位置的优先级为游戏脚本的优先级
     CurrentTabPriorities[targetIndex] = gamePriority
-    -- 后续标准接管流程
     local scroll = self.GetScroll(targetIndex, j)
     if not scroll then return false, "page_not_ready: " .. targetIndex .. ", " .. j end
     if payload.Mode ~= "Append" then
@@ -1129,6 +1163,7 @@ function Lib:RequestGameBridge(payload)
     if payload.Focus then bridge:Focus() end
     return true, bridge
 end
+
 local function PublishHost()
     pcall(function() shared.RealYoUI = Lib end)
     pcall(function() _G.RealYoUI = Lib end)
