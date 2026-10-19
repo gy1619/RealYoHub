@@ -262,7 +262,45 @@ local COL = UI.COL; local License = UI.License; local DEVICE_ID = UI.DEVICE_ID; 
 local ApplyTheme = UI.ApplyTheme; local ApplyFont = UI.ApplyFont; local LoadAvatar = UI.LoadAvatar
 local ListConfigNames = UI.ListConfigNames; local SaveConfig = UI.SaveConfig; local LoadConfig = UI.LoadConfig
 local DeleteConfig = UI.DeleteConfig; local GetAutoLoad = UI.GetAutoLoad; local SetAutoLoad = UI.SetAutoLoad
-local function ScrollOf(page) return page:FindFirstChildOfClass("ScrollingFrame") end
+local function ScrollOf(page)
+    if not page then
+        warn("[RealYoUI] ScrollOf: page is nil")
+        return nil
+    end
+    local s = page:FindFirstChildOfClass("ScrollingFrame")
+    if not s then
+        warn("[RealYoUI] ScrollOf: scroll missing, auto-recreate")
+        s = UI.Create("ScrollingFrame", {
+            Size = UDim2.new(1, 0, 1, 0),
+            BackgroundTransparency = 1,
+            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            ScrollBarThickness = math.max(2, 3),
+            ScrollBarImageColor3 = Color3.fromRGB(120, 120, 120),
+            Parent = page,
+        })
+        UI.Create("UIListLayout", {
+            FillDirection = Enum.FillDirection.Vertical,
+            Padding = UDim.new(0, 8),
+        }, s)
+        UI.Create("UIPadding", {
+            PaddingTop = UDim.new(0, 10),
+            PaddingLeft = UDim.new(0, 6),
+            PaddingRight = UDim.new(0, 6),
+            PaddingBottom = UDim.new(0, 10),
+        }, s)
+    end
+    return s
+end
+
+-- 构建前探针：告诉我们到底哪几页缺 scroll（用于定位根因，不影响运行）
+for m = 1, 4 do
+    for j = 1, 4 do
+        local pg = (pages[m] or {})[j]
+        if not pg or not pg:FindFirstChildOfClass("ScrollingFrame") then
+            warn(("[RealYoUI] pages[%d][%d] scroll missing BEFORE build"):format(m, j))
+        end
+    end
+end
 
 local Mods = {
     SpeedOn = false, Speed = 16, JumpOn = false, Jump = 50, Fly = false, FlySpeed = 50,
