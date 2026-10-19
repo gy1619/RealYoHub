@@ -363,24 +363,37 @@ return l
 end
 
 local function MakeButton(parent, text, cb)
-local host = AsFlow(parent).Add(math.max(S(40) + EstW(text, TS(12)), S(90)), S(28))
-local btn = Create("TextButton", {
-Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 0.35,
-Text = text, TextColor3 = COL.TextDark, Font = Enum.Font.GothamMedium,
-TextSize = TS(12), AutoButtonColor = false, Parent = host,
-})
-AddCorner(btn, S(5))
-Create("UIStroke", { Thickness = 1, Color = Color3.fromRGB(160, 160, 160), Transparency = 0.4 }, btn)
-SafeClick(btn, function() if cb then cb() end end)
-return btn
+    local host = AsFlow(parent).Add(math.max(S(40) + EstW(text, TS(12)), S(90)), S(28))
+    local btn = Create("TextButton", {
+        Size = UDim2.new(1, 0, 1, 0), 
+        BackgroundColor3 = AP.Comp, 
+        BackgroundTransparency = AP.CompT,
+        Text = text, 
+        TextColor3 = AP.Text, 
+        Font = Enum.Font.GothamMedium,
+        TextSize = TS(12), 
+        AutoButtonColor = false, 
+        Parent = host,
+    })
+    AddCorner(btn, S(5))
+    Create("UIStroke", { Thickness = 1, Color = AP.Stroke, Transparency = 0.4 }, btn)
+    SafeClick(btn, function() if cb then cb() end end)
+    return btn
 end
 
 local function MakeTextBox(parent, placeholder, default)
 local host = AsFlow(parent).Add(S(200), S(28))
 local box = Create("TextBox", {
-Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = COL.White, BackgroundTransparency = 0.35,
-Text = default or "", PlaceholderText = placeholder, TextColor3 = COL.TextDark,
-Font = Enum.Font.GothamMedium, TextSize = TS(13), ClearTextOnFocus = false, Parent = host,
+    Size = UDim2.new(1, 0, 1, 0), 
+    BackgroundColor3 = AP.Comp, 
+    BackgroundTransparency = AP.CompT,
+    Text = default or "", 
+    PlaceholderText = placeholder, 
+    TextColor3 = AP.Text,
+    Font = Enum.Font.GothamMedium, 
+    TextSize = TS(13), 
+    ClearTextOnFocus = false, 
+    Parent = host,
 })
 AddCorner(box, S(5))
 Create("UIStroke", { Thickness = 1, Color = Color3.fromRGB(160, 160, 160), Transparency = 0.4 }, box)
@@ -388,30 +401,37 @@ return box
 end
 
 local function MakeToggle(parent, text, default, cb, register)
-if register == nil then register = true end
-local host = AsFlow(parent).Add(S(36) + EstW(text) + S(10), S(28))
-local state = default and true or false
-local row = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Parent = host })
-local box = Create("Frame", {
-Size = UDim2.fromOffset(S(18), S(18)), Position = UDim2.fromOffset(0, S(5)),
-BackgroundColor3 = state and COL.Red or Color3.fromRGB(120, 120, 120), Parent = row,
-})
-AddCorner(box, S(3))
-local label = Create("TextLabel", {
-Size = UDim2.new(1, -S(26), 1, 0), Position = UDim2.fromOffset(S(26), 0), BackgroundTransparency = 1,
-Text = text, TextColor3 = COL.TextDark, TextSize = TS(13), Font = Enum.Font.Gotham,
-TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = row,
-})
-local function apply(v, fire)
-v = v and true or false
-if v == state then return end
-state = v
-box.BackgroundColor3 = state and COL.Red or Color3.fromRGB(120, 120, 120)
-if fire and cb then cb(state) end
-end
-SafeClick(row, function() apply(not state, true) end)
-if register then RegisterSetting(text, "toggle", function() return state end, function(v) apply(v, true) end) end
-return row
+    if register == nil then register = true end
+    local host = AsFlow(parent).Add(S(36) + EstW(text) + S(10), S(28))
+    local state = default and true or false
+    local row = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Parent = host })
+    
+
+    local offColor = Color3.fromRGB(120, 120, 120) 
+    local box = Create("Frame", {
+        Size = UDim2.fromOffset(S(18), S(18)), Position = UDim2.fromOffset(0, S(5)),
+        BackgroundColor3 = state and AP.Accent or offColor, Parent = row,
+    })
+    AddCorner(box, S(3))
+    
+    local label = Create("TextLabel", {
+        Size = UDim2.new(1, -S(26), 1, 0), Position = UDim2.fromOffset(S(26), 0), BackgroundTransparency = 1,
+        Text = text, TextColor3 = AP.Text, TextSize = TS(13), Font = Enum.Font.Gotham,
+        TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = row,
+    })
+    
+    local function apply(v, fire)
+        v = v and true or false
+        if v == state then return end
+        state = v
+        -- ✅ 修复：动态更新颜色
+        box.BackgroundColor3 = state and AP.Accent or offColor
+        if fire and cb then cb(state) end
+    end
+    
+    SafeClick(row, function() apply(not state, true) end)
+    if register then RegisterSetting(text, "toggle", function() return state end, function(v) apply(v, true) end) end
+    return row
 end
 
 local function MakeSlider(parent, text, min, max, default, cb)
