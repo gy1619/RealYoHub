@@ -10,27 +10,20 @@ local Lib = {
 -- ✅ 新增：Tab 优先级协议
 local TabDefaultPriorities = { ["Info"] = 100, ["ESP"] = 80, ["FE"] = 60, ["ScriptHub"] = 10 }
 local CurrentTabPriorities = { 100, 80, 60, 10 } -- 对应 Index 1, 2, 3, 4
--- ✅ 新增：偷梁换柱核心函数 (将高优先级 Tab 的内容移动到最低优先级 Tab)
--- ✅ 核心：偷梁换柱函数 (修改版：移动前先清空目标位置)
+-- ✅ 修复后的偷梁换柱函数 (正确交换名称和子菜单)
 function Lib:DisplaceTab(highIndex, lowIndex)
     if highIndex == lowIndex then return end
     
-    -- ✅ 新增：先清空低优先级 Tab (lowIndex/ScriptHub) 的内容，防止旧脚本残留
-    for subIdx = 1, 4 do
-        local dstScroll = self.GetScroll(lowIndex, subIdx)
-        if dstScroll then
-            for _, child in ipairs(dstScroll:GetChildren()) do
-                if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then child:Destroy() end
-            end
-            self:ClearFlowCache(dstScroll)
-        end
-    end
-
-    -- 1. 移动 GUI 元素 (把 Info 内容移到 ScriptHub)
+    -- 1. 移动 GUI 元素 (把高优先级内容移到低优先级位置)
     for subIdx = 1, 4 do
         local srcScroll = self.GetScroll(highIndex, subIdx)
         local dstScroll = self.GetScroll(lowIndex, subIdx)
         if srcScroll and dstScroll then
+            -- 先清空目标位置 (ScriptHub) 的旧内容
+            for _, child in ipairs(dstScroll:GetChildren()) do
+                if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then child:Destroy() end
+            end
+            -- 移动源位置 (Info) 的内容过去
             for _, child in ipairs(srcScroll:GetChildren()) do
                 if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
                     child.Parent = dstScroll
@@ -40,27 +33,33 @@ function Lib:DisplaceTab(highIndex, lowIndex)
             self:ClearFlowCache(dstScroll)
         end
     end
-    
-    -- 2. 交换名称
+
+    -- 2. ✅ 关键修复：交换主菜单名称 (Info <-> ScriptHub)
     local tempName = self._mainNames[highIndex]
     self._mainNames[highIndex] = self._mainNames[lowIndex]
     self._mainNames[lowIndex] = tempName
-    if self._sideButtons and self._sideButtons[lowIndex] then self._sideButtons[lowIndex].Text = tempName end
     
-    -- 3. 交换子菜单
+    -- 更新侧边栏按钮显示
+    if self._sideButtons and self._sideButtons[highIndex] then self._sideButtons[highIndex].Text = self._mainNames[highIndex] end
+    if self._sideButtons and self._sideButtons[lowIndex] then self._sideButtons[lowIndex].Text = self._mainNames[lowIndex] end
+
+    -- 3. ✅ 关键修复：交换子菜单名称
     if self._subNameSets and self._subNameSets[highIndex] and self._subNameSets[lowIndex] then
         local tempSubs = self._subNameSets[highIndex]
         self._subNameSets[highIndex] = self._subNameSets[lowIndex]
         self._subNameSets[lowIndex] = tempSubs
     end
-    
-    -- 4. 交换优先级
-    local tempPri = self._tabPriorities[highIndex]
-    self._tabPriorities[highIndex] = self._tabPriorities[lowIndex]
-    self._tabPriorities[lowIndex] = tempPri
-    
+
+    -- 4. 交换优先级记录
+    local tempPri = CurrentTabPriorities[highIndex]
+    CurrentTabPriorities[highIndex] = CurrentTabPriorities[lowIndex]
+    CurrentTabPriorities[lowIndex] = tempPri
+
     -- 5. 刷新 UI
-    if self._refreshTopNames and self._getCurrentMain and self._getCurrentMain() == lowIndex then self._refreshTopNames(lowIndex) end
+    if self._refreshTopNames and self._getCurrentMain then
+        if self._getCurrentMain() == highIndex then self._refreshTopNames(highIndex) end
+        if self._getCurrentMain() == lowIndex then self._refreshTopNames(lowIndex) end
+    end
 end
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -948,9 +947,10 @@ function Lib:Initialize(opts)
     self.Initialized = true
     return self
 end
+-- ✅ 修复后的查找函数 (强制去除所有空格进行比对)
 local function FindPageIndices(category, sub)
-    category = tostring(category):gsub("%s+", " ")
-    sub = tostring(sub):gsub("%s+", " ")
+    category = tostring(category):gsub("%s+", "") -- 去除所有空格
+    sub = tostring(sub):gsub("%s+", "")           -- 去除所有空格
     local mNames = Lib._mainNames or { "Info", "ESP", "FE", "ScriptHub" }
     local sSets = Lib._subNameSets or {
         { "Annc", "Other", "Config", "Theme" },
@@ -959,15 +959,17 @@ local function FindPageIndices(category, sub)
         { "RealYoHub", "Keyless Script", "Keys Script", "Admin" },
     }
     for m, mn in ipairs(mNames) do
-        if tostring(mn):gsub("%s+", " ") == category then
+        if tostring(mn):gsub("%s+", "") == category then
             for j, sn in ipairs(sSets[m] or {}) do
-                if tostring(sn):gsub("%s+", " ") == sub then return m, j end
+                if tostring(sn):gsub("%s+", "") == sub then return m, j end
             end
             return m, nil
         end
     end
     return nil, nil
 end
+
+
 local BridgeMeta = {}
 BridgeMeta.__index = BridgeMeta
 function BridgeMeta:UsePageIndex(m, j, mode)
@@ -1055,60 +1057,55 @@ function Lib:RenameSub(m, j, newName)
     end
     return false
 end
+-- ✅ 修复后的握手函数 (增加防错保护)
 function Lib:RequestGameBridge(payload)
     payload = payload or {}
     if payload.Brand ~= self.Brand then return false, "brand_mismatch" end
     if payload.Protocol and payload.Protocol ~= self.BridgeProtocol then return false, "protocol_mismatch" end
     if not self.Initialized then return false, "ui_not_initialized" end
-    local requestedCat = tostring(payload.RequestedCategory or payload.Category or "ScriptHub"):gsub("%s+", " ")
-    local sub = tostring(payload.Sub or "RealYoHub"):gsub("%s+", " ")
+    
+    local requestedCat = tostring(payload.RequestedCategory or payload.Category or "ScriptHub"):gsub("%s+", "")
+    local sub = tostring(payload.Sub or "RealYoHub"):gsub("%s+", "")
     local m, j = FindPageIndices(requestedCat, sub)
-    if not m or not j then return false, "page_not_found: " .. requestedCat .. "/" .. sub end
-    -- ✅ 弹性替换逻辑：优先级仲裁
-    local gamePriority = tonumber(payload.Priority) or 50 -- 游戏脚本默认优先级 50
+    
+    -- ✅ 修复：如果找不到页面，直接返回错误，防止后续 nil 报错
+    if not m or not j then 
+        return false, "page_not_found: " .. requestedCat .. "/" .. sub 
+    end
+
+    local gamePriority = tonumber(payload.Priority) or 50
     local targetIndex = m
-    -- 如果目标 Tab 当前优先级 >= 游戏脚本优先级 (说明游戏脚本想抢占高优先级位置)
-    if CurrentTabPriorities[targetIndex] >= gamePriority then
-        -- 寻找当前所有 Tab 中优先级最低的
-        local lowestIndex = 1
-        local lowestPri = CurrentTabPriorities[1]
-        for i = 2, 4 do
-            if CurrentTabPriorities[i] < lowestPri then
-                lowestPri = CurrentTabPriorities[i]
-                lowestIndex = i
+    
+    -- 优先级仲裁 (增加 pcall 保护)
+    local ok, err = pcall(function()
+        if CurrentTabPriorities[targetIndex] >= gamePriority then
+            local lowestIndex = 1
+            local lowestPri = CurrentTabPriorities[1] or 0
+            for i = 2, 4 do
+                if (CurrentTabPriorities[i] or 0) < lowestPri then
+                    lowestPri = CurrentTabPriorities[i]
+                    lowestIndex = i
+                end
+            end
+            if lowestIndex ~= targetIndex then
+                self:DisplaceTab(targetIndex, lowestIndex)
             end
         end
-        -- 如果最低优先级的不是目标位置，执行偷梁换柱
-        if lowestIndex ~= targetIndex then
-            self:DisplaceTab(targetIndex, lowestIndex)
-        end
-    end
-    -- 更新目标位置的优先级为游戏脚本的优先级
-    CurrentTabPriorities[targetIndex] = gamePriority
-    -- 后续标准接管流程
+        CurrentTabPriorities[targetIndex] = gamePriority
+    end)
+    if not ok then warn("[UI Lib] Priority logic error: " .. tostring(err)) end
+
     -- 后续标准接管流程
     local scroll = self.GetScroll(targetIndex, j)
-    if not scroll then return false, "page_not_ready: " .. targetIndex .. ", " .. j end
+    if not scroll then return false, "page_not_ready" end
     
-    -- ✅ 修复：如果是 Replace 模式，强制清空该主菜单 (targetIndex) 下的所有 4 个子页面
-    -- 这样可以确保原本 Info 页的 Config, Theme 等组件全部被丢弃，不会残留
-    if payload.Mode == "Replace" then
-        for clearJ = 1, 4 do
-            local clearScroll = self.GetScroll(targetIndex, clearJ)
-            if clearScroll then
-                for _, c in ipairs(clearScroll:GetChildren()) do
-                    if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
-                end
-                self:ClearFlowCache(clearScroll)
-            end
-        end
-    elseif payload.Mode ~= "Append" then
-        -- 如果是其他非 Append 模式，只清空当前页
+    if payload.Mode ~= "Append" then
         for _, c in ipairs(scroll:GetChildren()) do
             if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
         end
         self:ClearFlowCache(scroll)
     end
+    
     local bridge = setmetatable({
         UI = self, Name = payload.Name or "GameScript", Active = true,
         Protocol = self.BridgeProtocol, Host = scroll, MainIndex = targetIndex, SubIndex = j,
