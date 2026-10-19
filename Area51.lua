@@ -128,97 +128,138 @@ local function BridgeAdapter(bridge)
     return A
 end
 
--- ✅✅✅ 智能 Gun Modded (完整实现) ✅✅✅
+-- ✅✅✅ 智能 Gun Modded V2 (实时监测 + 动态 Setting) ✅✅✅
 local function BuildGunModded(A)
     local bridge = A._b
-    local host = bridge.Host
-    local weaponData = {}
+    local scrollHost = bridge.Host          -- 锁定滚动页，动态组件都挂在这里
+    local weaponData = {}                   -- name -> setting 表
+    local weaponDrop = nil                  -- 下拉框 handle
+    local lastSig = nil
+    local dynFrame = nil                    -- 当前动态组件容器
+    local dynGroup = nil                    -- 当前动态组件的 config 分组
 
-    -- 1. 扫描武器
+    -- 1. 扫描武器：条件 = Tool 里有叫 Setting 的子物体（按你的要求）
     local function scanWeapons()
         weaponData = {}
-        local list = {}
+        local list, seen = {}, {}
+        local function tryAdd(tool)
+            if not (tool and tool:IsA("Tool")) then return end
+            local cfg = tool:FindFirstChild("Setting")
+            if not cfg or seen[tool.Name] then return end
+            seen[tool.Name] = true
+            table.insert(list, tool.Name)
+            local ok, setting = pcall(require, cfg)   -- ModuleScript，return 那张表
+            if ok and type(setting) == "table" then
+                weaponData[tool.Name] = setting
+            end
+        end
         local function check(container)
             if not container then return end
-            for _, tool in pairs(container:GetChildren()) do
-                if tool:IsA("Tool") and tool:FindFirstChild("Setting") then
-                    local ok, setting = pcall(require, tool.Setting)
-                    if ok and type(setting) == "table" then
-                        weaponData[tool.Name] = setting
-                        table.insert(list, tool.Name)
-                    end
-                end
-            end
+            for _, tool in ipairs(container:GetChildren()) do tryAdd(tool) end
         end
         check(LocalPlayer.Backpack)
         check(LocalPlayer.Character)
         return list
     end
 
-    -- 2. 渲染属性 (支持 Config 分组保存)
-    local function renderProperties(name)
-        if not name or not weaponData[name] then return end
-        
-        -- 清除旧的动态组件 (标记为 DynProp)
-        for _, child in ipairs(host:GetChildren()) do
-            if child:GetAttribute("DynProp") then child:Destroy() end
-        end
-        -- 也要清除 FlowOf 容器里的 (如果有的话，这里简单处理直接遍历 host)
-        -- 注意：MakeSlider 会创建复杂结构，我们依靠 Bridge 的 ClearPage 太暴力。
-        -- 这里我们只销毁带有 DynProp 标记的 Frame/TextLabel。
-        -- 由于 MakeSlider 内部创建的 Frame 没有标记，我们需要一种更聪明的方法。
-        -- 妥协方案：每次选择武器，不销毁旧的，而是追加新的 Section。
-        -- 但为了界面整洁，我们手动销毁所有非 Section/Dropdown 的后续组件。
-        
-        -- 简单方案：直接追加
-        A:Section("Properties for " .. name)
-        local sec = host:FindFirstChildWhichIsA("TextLabel") -- 获取刚创建的 Section
-        -- 标记 Section 以便后续清理 (如果 Section 是 TextLabel)
-        if sec and sec.Text:find("Properties for") then
-            sec:SetAttribute("DynProp", true)
-        end
-
-        local setting = weaponData[name]
-        for key, value in pairs(setting) do
-            local t = type(value)
-            if t == "number" then
-                local minV, maxV = 0, 1000000
-                if key:lower():find("rate") or key:lower():find("speed") then maxV = 100
-                elseif key:lower():find("spread") then maxV = 10
-                elseif key:lower():find("damage") then maxV = 999999
-                end
-                -- ✅ 传入 name 作为 group，保存时变成 { [name]: { [key]: value } }
-                A:Slider(key, minV, maxV, value, function(v)
-                    setting[key] = v
-                end, name)
-            elseif t == "boolean" then
-                A:Toggle(key, value, function(v)
-                    setting[key] = v
-                end, name)
-            end
+    -- 2. 清掉旧动态组件 + 清掉它的 config 注册
+    local function clearDyn()
+        if dynFrame then pcall(function() dynFrame:Destroy() end) dynFrame = nil end
+        if dynGroup then
+            pcall(function()
+                if bridge.UI and bridge.UI.PurgeSettings then bridge.UI.PurgeSettings(dynGroup) end
+            end)
+            dynGroup = nil
         end
     end
 
-    -- 3. 构建 UI
-    A:Section("Weapon Scanner")
-    A:Button("Refresh Weapons", function()
-        local list = scanWeapons()
-        Notify("Scanner", "Found " .. #list .. " weapons", 3, "info")
-    end)
+    -- 3. 动态渲染某把武器的 Setting
+    local function renderProperties(name)
+        local setting = weaponData[name]
+        if not setting then Notify("GunMod", "cannot read " .. name .. " Setting", 3) return end
+        clearDyn()
+        dynGroup = name
+        dynFrame = Instance.new("Frame")
+        dynFrame.Name = "DynProps"
+        dynFrame.BackgroundTransparency = 1
+        dynFrame.Size = UDim2.new(1, 0, 0, 0)
+        dynFrame.AutomaticSize = Enum.AutomaticSize.Y
+        dynFrame.Parent = scrollHost
+        local lay = Instance.new("UIListLayout")
+        lay.Padding = UDim.new(0, 2)
+        lay.Parent = dynFrame
 
-    A:Section("Select Weapon")
-    local list = scanWeapons()
-    if #list == 0 then list = {"No weapons"} end
-    
-    A:Dropdown("Choose Weapon", list, list[1], function(selected)
-        if weaponData[selected] then
-            renderProperties(selected)
+        local oldHost = bridge.Host
+        bridge.Host = dynFrame   -- ✅ 接下来的组件全部建进 dynFrame，换武器时整体销毁
+
+        A:Section("Properties for " .. name)
+        local keys = {}
+        for k in pairs(setting) do table.insert(keys, k) end
+        table.sort(keys)         -- 固定顺序，每次渲染不乱跳
+        for _, key in ipairs(keys) do
+            local value = setting[key]
+            local t = type(value)
+            if t == "boolean" then
+                A:Toggle(key, value, function(v) setting[key] = v end, name)
+            elseif t == "number" then
+                if key:match("ID$") or key:match("Id$") then
+                    A:Label(key .. " = " .. tostring(value))        -- 资产ID，只读
+                elseif value == math.floor(value) then
+                    local mx = (value <= 0) and 100 or math.clamp(value * 10, 10, 100000)
+                    A:Slider(key, 0, mx, value, function(v) setting[key] = v end, name)
+                else
+                    local v100 = math.floor(value * 100 + 0.5)
+                    local mx100 = math.clamp(v100 * 10, 100, 10000)
+                    A:Slider(key .. " (x0.01)", 0, mx100, v100, function(v) setting[key] = v / 100 end, name)
+                end
+            else
+                A:Label(key .. " = " .. tostring(value))            -- Vector3/Enum/表 等只读
+            end
         end
+        bridge.Host = oldHost
+        Notify("GunMod", "loaded " .. name .. " setting (" .. #keys .. " item)", 3)
+    end
+
+    -- 4. 重扫 + 同步下拉框
+    local function rescan()
+        local list = scanWeapons()
+        local sig = table.concat(list, "|")
+        if sig ~= lastSig then
+            lastSig = sig
+            if weaponDrop then
+                weaponDrop.SetOptions((#list > 0) and list or { "No weapons" })
+            end
+        end
+        return list
+    end
+
+    -- 5. 实时监测：捡枪/装备/掉枪立刻刷新列表
+    local function watchContainer(c)
+        if not c then return end
+        c.ChildAdded:Connect(function(ch)
+            if ch:IsA("Tool") then task.delay(0.15, rescan) end
+        end)
+        c.ChildRemoved:Connect(function(ch)
+            if ch:IsA("Tool") then rescan() end
+        end)
+    end
+    watchContainer(LocalPlayer.Backpack)
+    if LocalPlayer.Character then watchContainer(LocalPlayer.Character) end
+    LocalPlayer.CharacterAdded:Connect(function(ch) watchContainer(ch))
+
+    -- 6. UI
+    A:Section("Weapon Scanner")
+    local list = rescan()
+    A:Button("Refresh Weapons", function()
+        local l = rescan()
+        Notify("Scanner", "Found " .. #l .. " weapons", 3)
     end)
-    
+    A:Section("Select Weapon")
+    weaponDrop = A:Dropdown("Choose Weapon",
+        (#list > 0) and list or { "No weapons" },
+        (#list > 0) and list[1] or "No weapons",
+        function(selected) renderProperties(selected) end)
     A:Section("Instructions")
-    A:Label("Select a weapon above to mod it.")
-    A:Label("Settings are saved per weapon in Config.")
 end
 
 -- ✅✅✅ Area 51 功能 (完整) ✅✅✅
