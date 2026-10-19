@@ -1,5 +1,5 @@
--- area51.lua | RealYoHub (RealYoUI GameBridge auto-handshake)
--- ✅ 正式版：已清理调试 print，修复语法错误，包含完整功能
+-- ✅✅✅ ULTIMATE FIXED v9.9 ✅✅✅ (如果看到这行，说明执行的是最新代码)
+print("✅✅✅ ULTIMATE FIXED v9.9 ✅✅✅")
 
 local GAME = { Name = "RealYoHub Area51", Brand = "RealYoUI" }
 local Players = game:GetService("Players")
@@ -7,7 +7,6 @@ local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
-
 _G.savedPosition = _G.savedPosition or nil
 local Runtime = { Mode = "Original", Bridge = nil, Host = nil }
 
@@ -19,9 +18,8 @@ end
 
 local AUTO_ACCEPT = true
 
--- ✅ 1. 寻找 HostUI (会自动等待 Initialized 变为 true)
 local function FindHostUI(timeout)
-    timeout = timeout or 10 -- 增加超时时间，等待 Main Script 初始化
+    timeout = timeout or 5
     local sources = {
         { name = "shared", get = function() return shared and shared.RealYoUI end },
         { name = "_G", get = function() return _G and _G.RealYoUI end },
@@ -44,51 +42,48 @@ local function FindHostUI(timeout)
                 elseif type(obj.RequestGameBridge) ~= "function" then 
                     why = "Found " .. src.name .. " but missing API"
                 elseif obj.Initialized ~= true then 
-                    why = "Found " .. src.name .. " but not initialized (waiting...)"
-                    -- 继续循环等待
+                    why = "Found " .. src.name .. " but not initialized"
                 else 
                     return obj, src.name 
                 end
             end
         end
         if tick() >= deadline then break end
-        task.wait(0.5)
+        task.wait(0.2)
     end
     return nil, why
 end
 
-local HostUI, whyOrSrc = FindHostUI(10)
-if not HostUI then
+local HostUI, whyOrSrc = FindHostUI(5)
+if HostUI then
+    print(("[RealYoHub] Host detected (via %s), handshaking"):format(whyOrSrc))
+else
     warn("[RealYoHub] Handshake failed. Reason: " .. tostring(whyOrSrc))
-    return -- 找不到宿主直接退出
 end
 
--- ✅ 2. 请求 Bridge
-if AUTO_ACCEPT then
+if AUTO_ACCEPT and HostUI then
     local ok, success, bridgeOrErr = pcall(function()
         return HostUI:RequestGameBridge({
             Brand = GAME.Brand,
             Protocol = HostUI.BridgeProtocol or 2,
             Name = GAME.Name,
             RequestedCategory = "Info",
-            Priority = 90,
             Category = "Info",
             Sub = "Annc",
             Mode = "Replace",
             Focus = false,
         })
     end)
-    
     if ok and success == true and type(bridgeOrErr) == "table" then
         Runtime.Mode = "Host"
         Runtime.Bridge = bridgeOrErr
         Runtime.Host = HostUI
+        print("[RealYoHub] Bridge obtained, Mode=Host")
     else
         warn("[RealYoHub][ERR] RequestGameBridge: " .. tostring(ok and bridgeOrErr or success))
     end
 end
 
--- ✅ 3. 重命名 Tabs
 if Runtime.Mode == "Host" then
     SafeCall("RenameMain1", function() HostUI:RenameMain(1, "RealYoHub") end)
     SafeCall("RenameSub11", function() HostUI:RenameSub(1, 1, "Area 51") end)
@@ -103,7 +98,6 @@ local function Notify(title, content, duration, icon)
     end
 end
 
--- ✅ BridgeAdapter
 local function BridgeAdapter(bridge)
     local A = { _b = bridge }
     function A:Section(t) return self._b:Section(t) end
@@ -120,7 +114,6 @@ local function BridgeAdapter(bridge)
     return A
 end
 
--- ✅✅✅ Gun Modded V2 (实时监测 + 动态 Setting) ✅✅✅
 local function BuildGunModded(A)
     local bridge = A._b
     local scrollHost = bridge.Host
@@ -165,7 +158,7 @@ local function BuildGunModded(A)
 
     local function renderProperties(name)
         local setting = weaponData[name]
-        if not setting then Notify("GunMod", "Cannot read " .. name .. " Setting", 3) return end
+        if not setting then Notify("GunMod", "cannot read " .. name .. " Setting", 3) return end
         clearDyn()
         dynGroup = name
         dynFrame = Instance.new("Frame")
@@ -206,7 +199,7 @@ local function BuildGunModded(A)
             end
         end
         bridge.Host = oldHost
-        Notify("GunMod", "Loaded " .. name .. " (" .. #keys .. " items)", 3)
+        Notify("GunMod", "loaded " .. name .. " setting (" .. #keys .. " item)", 3)
     end
 
     local function rescan()
@@ -246,10 +239,8 @@ local function BuildGunModded(A)
         (#list > 0) and list[1] or "No weapons",
         function(selected) renderProperties(selected) end)
     A:Section("Instructions")
-    A:Label("Select a weapon to mod it.")
 end
 
--- ✅✅✅ Area 51 功能 ✅✅✅
 local function BuildArea51(A)
     local speedHackConnection = nil
     local farmConn = nil
@@ -355,7 +346,7 @@ local function BuildArea51(A)
                 local btn = Workspace:FindFirstChild("Incinerator") and Workspace.Incinerator:FindFirstChild("ChallengeButton7") and Workspace.Incinerator.ChallengeButton7:FindFirstChild("Button")
                 if btn then
                     local p = btn:FindFirstChildOfClass("ProximityPrompt")
-                    -- ✅ 修复：这里必须加分号
+                    -- 终极修复：确保分号存在
                     if p then p.HoldDuration = 0; fireproximityprompt(p) end
                 end
                 task.wait(0.8)
@@ -365,7 +356,7 @@ local function BuildArea51(A)
                 if mid then root.CFrame = CFrame.new(mid) task.wait(3) end
             end
             root.CFrame = CFrame.new(final)
-            Notify("Success", "Obtained " .. name, 5)
+            Notify("Success", "Obtained " .. name, 5, "package")
         end)
     end
     
@@ -450,7 +441,7 @@ local function BuildArea51(A)
                 end
             end
         end)
-        Notify("Supply", "Instant pickup enabled", 6)
+        Notify("Supply", "Instant pickup enabled", 6, "package")
     end)
     
     local blacklistCoordinates = {
@@ -489,11 +480,10 @@ local function BuildArea51(A)
                 v:Destroy()
             end
         end
-        Notify("Cleanup", "All damage parts removed", 5)
+        Notify("Cleanup", "All damage parts removed", 5, "trash-2")
     end)
 end
 
--- ✅✅✅ Teleport 功能 ✅✅✅
 local function BuildTeleport(A)
     local places = {
         ["Crafting Room"] = Vector3.new(953.97, 1060, 713.44), ["Shop"] = Vector3.new(588.74, 1151, 665.43),
@@ -523,16 +513,15 @@ local function BuildTeleport(A)
             if not nickname then return end
             if v and not nicknameHidden then
                 originalName = nickname.Text; nickname.Text = "Fuck51DevLoL"; nicknameHidden = true
-                Notify("Name Hidden", "Now showing: Fuck51DevLoL", 3)
+                Notify("Name Hidden", "Now showing: Fuck51DevLoL", 3, "user")
             elseif not v and nicknameHidden then
                 nickname.Text = originalName; nicknameHidden = false
-                Notify("Name Restored", "Back to original name", 3)
+                Notify("Name Restored", "Back to original name", 3, "user")
             end
         end)
     end)
 end
 
--- ✅✅✅ FE Tools 功能 ✅✅✅
 local function BuildFETools(A)
     local connections = {}
     A:Button("Player Join Notification", function() loadstring(game:HttpGet("https://raw.githubusercontent.com/boyscp/scriscriptsc/main/bbn.lua"))() end)
@@ -540,12 +529,12 @@ local function BuildFETools(A)
     A:Button("Fly", function() loadstring(game:HttpGet("https://pastebin.com/raw/brP8SAfJ"))() end)
     A:Button("Save Position", function()
         local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if root then _G.savedPosition = root.Position; Notify("Position", "Saved!", 3) end
+        if root then _G.savedPosition = root.Position; Notify("Position", "Saved!", 3, "save") end
     end)
     A:Button("Copy Position", function()
         if _G.savedPosition then
             setclipboard(string.format("Vector3.new(%.3f, %.3f, %.3f)", _G.savedPosition.X, _G.savedPosition.Y, _G.savedPosition.Z))
-            Notify("Position", "Copied!", 4)
+            Notify("Position", "Copied!", 4, "copy")
         end
     end)
     A:Button("TP to Saved Position", function()
@@ -589,7 +578,6 @@ local function BuildFETools(A)
     end)
 end
 
--- ✅ 定义完整性自检
 local function DefCheck()
     local missing = {}
     local function chk(n, v)
@@ -610,7 +598,6 @@ local function DefCheck()
     return true
 end
 
--- ✅ 执行构建
 if Runtime.Mode == "Host" and DefCheck() then
     local bridge = Runtime.Bridge
     SafeCall("Build Area51", function() bridge:UsePageIndex(1, 1, "Replace"); BuildArea51(BridgeAdapter(bridge)) end)
@@ -618,7 +605,7 @@ if Runtime.Mode == "Host" and DefCheck() then
     SafeCall("Build Teleport", function() bridge:UsePageIndex(1, 3, "Replace"); BuildTeleport(BridgeAdapter(bridge)) end)
     SafeCall("Build FETools", function() bridge:UsePageIndex(1, 4, "Replace"); BuildFETools(BridgeAdapter(bridge)) end)
     SafeCall("Focus", function() bridge:Focus() end)
-    Notify("RealYoHub", "Handshake OK - hosted by RealYoUI", 6)
+    SafeCall("HandshakeToast", function() Notify("RealYoHub", "Handshake OK - hosted by RealYoUI", 6, "crown") end)
 else
-    warn("[RealYoHub] not built. Mode=" .. tostring(Runtime.Mode))
+    warn("[RealYoHub] not built. Mode=" .. tostring(Runtime.Mode) .. " (Host 未握手成功 或 DefCheck 失败)")
 end
