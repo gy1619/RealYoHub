@@ -51,19 +51,20 @@ local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
-local LocalPlayer = Players.LocalPlayer
+
 local cloneref = cloneref or function(o) return o end
-local okCore, CoreGuiService = pcall(function() return cloneref(game:GetService("CoreGui")) end)
+
+local okCore, CoreGuiService = pcall(function()
+    return cloneref(game:GetService("CoreGui"))
+end)
+
 local taskWait = (task and task.wait) or function() return wait() end
-local camNow = workspace.CurrentCamera
-local vpSize = (camNow and camNow.ViewportSize) or Vector2.new(1280, 720)
-if vpSize.X < 100 then vpSize = Vector2.new(1280, 720) end
-local UI_SCALE = math.min(vpSize.X / 1280, vpSize.Y / 720)
-if UI_SCALE <= 0 then UI_SCALE = 1 end
-local function S(v) return v * UI_SCALE end
-local function TS(v) return math.max(10, math.floor(v * UI_SCALE)) end
-Lib.S = S
-Lib.TS = TS
+
+local LocalPlayer = Players.LocalPlayer
+while not LocalPlayer do
+    taskWait()
+    LocalPlayer = Players.LocalPlayer
+end
 
 local function Create(class, props, parent)
     local obj = Instance.new(class)
@@ -149,18 +150,37 @@ Lib.RegisterSetting = RegisterSetting
 
 local CFG_DIR = "RealYo_Configs"
 local AUTO_FILE = CFG_DIR .. "/autoload.json"
-local function FileSupport() return type(writefile) == "function" and type(readfile) == "function" and type(isfile) == "function" end
-local function EnsureFolder() pcall(function() if type(makefolder) == "function" and not isfolder(CFG_DIR) then makefolder(CFG_DIR) end end) end
+
+local function FileSupport()
+    return type(writefile) == "function"
+        and type(readfile) == "function"
+        and type(isfile) == "function"
+end
+
+local function EnsureFolder()
+    pcall(function()
+        if type(makefolder) == "function" and not isfolder(CFG_DIR) then
+            makefolder(CFG_DIR)
+        end
+    end)
+end
+
 local function ListConfigNames()
     local names = {}
+
     pcall(function()
         if type(listfiles) == "function" then
             for _, p in ipairs(listfiles(CFG_DIR)) do
-                local n = tostring(p):match("([^/\\]+)%.json$")
-                if n and n ~= "autoload" then table.insert(names, n) end
+                local path = tostring(p):gsub("\\", "/")
+                local n = path:match("([^/]+)%.json$")
+
+                if n and n ~= "autoload" then
+                    table.insert(names, n)
+                end
             end
         end
     end)
+
     return names
 end
 Lib.ListConfigNames = ListConfigNames
@@ -1013,41 +1033,62 @@ function Lib:Initialize(opts)
     return self
 end
 
+local function Trim(s)
+    return (tostring(s or ""):match("^%s*(.-)%s*$"))
+end
+
 local function FindPageIndices(category, sub)
-    category = tostring(category):gsub("%s+", " ")
-    sub = tostring(sub):gsub("%s+", " ")
+    category = Trim(category)
+    sub = Trim(sub)
+
     local mNames = Lib._mainNames or { "Info", "ESP", "FE", "ScriptHub" }
+
     local sSets = Lib._subNameSets or {
         { "Annc", "Other", "Config", "Theme" },
         { "ESP", "Nor yet", "Not yet", "Not yet" },
         { "Movement", "Character", "World", "Practical" },
         { "RealYoHub", "Keyless Script", "Keys Script", "Admin" },
     }
+
     for m, mn in ipairs(mNames) do
-        if tostring(mn):gsub("%s+", " ") == category then
+        if Trim(mn) == category then
             for j, sn in ipairs(sSets[m] or {}) do
-                if tostring(sn):gsub("%s+", " ") == sub then return m, j end
+                if Trim(sn) == sub then
+                    return m, j
+                end
             end
+
             return m, nil
         end
     end
+
     return nil, nil
 end
 
 local BridgeMeta = {}
 BridgeMeta.__index = BridgeMeta
 function BridgeMeta:UsePageIndex(m, j, mode)
+    mode = Trim(mode or "Replace")
+
     local scroll = self.UI.GetScroll(m, j)
-    if not scroll then return false, "page_not_ready" end
+    if not scroll then
+        return false, "page_not_ready"
+    end
+
     if mode ~= "Append" then
         for _, c in ipairs(scroll:GetChildren()) do
-            if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
+            if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then
+                c:Destroy()
+            end
         end
+
         self.UI:ClearFlowCache(scroll)
     end
+
     self.Host = scroll
     self.MainIndex = m
     self.SubIndex = j
+
     return true
 end
 function BridgeMeta:Focus()
@@ -1135,8 +1176,9 @@ function Lib:RequestGameBridge(payload)
     if payload.Brand ~= self.Brand then return false, "brand_mismatch" end
     if payload.Protocol and payload.Protocol ~= self.BridgeProtocol then return false, "protocol_mismatch" end
     if not self.Initialized then return false, "ui_not_initialized" end
-    local requestedCat = tostring(payload.RequestedCategory or payload.Category or "ScriptHub"):gsub("%s+", " ")
-    local sub = tostring(payload.Sub or "RealYoHub"):gsub("%s+", " ")
+    local requestedCat = Trim(payload.RequestedCategory or payload.Category or "ScriptHub")
+    local sub = Trim(payload.Sub or "RealYoHub")
+    local mode = Trim(payload.Mode or "Replace")
     local m, j = FindPageIndices(requestedCat, sub)
     if not m or not j then return false, "page_not_found: " .. requestedCat .. "/" .. sub end
     local gamePriority = tonumber(payload.Priority) or 50
@@ -1157,7 +1199,7 @@ function Lib:RequestGameBridge(payload)
     CurrentTabPriorities[targetIndex] = gamePriority
     local scroll = self.GetScroll(targetIndex, j)
     if not scroll then return false, "page_not_ready: " .. targetIndex .. ", " .. j end
-    if payload.Mode ~= "Append" then
+    if mode ~= "Append" then
         for _, c in ipairs(scroll:GetChildren()) do
             if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
         end
