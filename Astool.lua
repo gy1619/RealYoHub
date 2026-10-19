@@ -51,16 +51,13 @@ local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
-
 local cloneref = cloneref or function(o) return o end
-
 local okCore, CoreGuiService = pcall(function()
     return cloneref(game:GetService("CoreGui"))
 end)
-
 local taskWait = (task and task.wait) or function() return wait() end
-
 local LocalPlayer = Players.LocalPlayer
+
 while not LocalPlayer do
     taskWait()
     LocalPlayer = Players.LocalPlayer
@@ -73,6 +70,7 @@ local function Create(class, props, parent)
     return obj
 end
 Lib.Create = Create
+
 local function AddCorner(parent, r) return Create("UICorner", { CornerRadius = UDim.new(0, r) }, parent) end
 Lib.AddCorner = AddCorner
 
@@ -133,7 +131,6 @@ end
 local RAW_HWID = GenerateUniqueHWID()
 local DEVICE_ID = AdvancedHash(RAW_HWID .. "RealYo_SZE_SALT_V1")
 Lib.DEVICE_ID = DEVICE_ID
--- ✅✅✅ HWID 优化结束 ✅✅✅
 
 local License = {
     Mode = "open", Status = "Free",
@@ -153,8 +150,8 @@ local AUTO_FILE = CFG_DIR .. "/autoload.json"
 
 local function FileSupport()
     return type(writefile) == "function"
-        and type(readfile) == "function"
-        and type(isfile) == "function"
+    and type(readfile) == "function"
+    and type(isfile) == "function"
 end
 
 local function EnsureFolder()
@@ -167,26 +164,24 @@ end
 
 local function ListConfigNames()
     local names = {}
-
     pcall(function()
         if type(listfiles) == "function" then
             for _, p in ipairs(listfiles(CFG_DIR)) do
                 local path = tostring(p):gsub("\\", "/")
                 local n = path:match("([^/]+)%.json$")
-
                 if n and n ~= "autoload" then
                     table.insert(names, n)
                 end
             end
         end
     end)
-
     return names
 end
 Lib.ListConfigNames = ListConfigNames
 
 local ScreenGui = nil
 local ToastHolder = nil
+
 local function Toast(msg)
     if not ToastHolder then print("[Toast]", msg) return end
     local label = Create("TextLabel", {
@@ -228,7 +223,6 @@ local function LoadConfig(name)
     if not ok or not raw then Toast("not found: " .. name) return end
     local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
     if not ok2 or type(data) ~= "table" then Toast("config broke: " .. name) return end
-    
     local count = 0
     for _, e in ipairs(SettingRegistry) do
         local val = nil
@@ -385,6 +379,7 @@ local function FlowOf(scroll)
     local container = Create("Frame", { Size = UDim2.new(1, -S(8), 0, 0), BackgroundTransparency = 1, Parent = scroll })
     local slots = {}
     local padX, padY = S(12), S(10)
+    
     local function layout()
         local maxW = container.AbsoluteSize.X
         if maxW < 50 then maxW = mainW - S(40) end
@@ -412,6 +407,7 @@ local function FlowOf(scroll)
         end
         container.Size = UDim2.new(1, -S(8), 0, curY + rowH + S(2))
     end
+
     local flow = {}
     flow._container = container
     flow.Add = function(w, h)
@@ -434,6 +430,7 @@ local function FlowOf(scroll)
     return flow
 end
 Lib.FlowOf = FlowOf
+
 function Lib:ClearFlowCache(scroll) flowByScroll[scroll] = nil end
 local function AsFlow(parent) return (type(parent) == "table" and parent.Add) and parent or FlowOf(parent) end
 local function CreateGrid(scroll) return FlowOf(scroll) end
@@ -475,6 +472,7 @@ local AP = {
 }
 Lib.AP = AP
 local ORIG = { Comp = Color3.fromRGB(255, 255, 255), Text = Color3.fromRGB(70, 70, 70), Dim = Color3.fromRGB(110, 110, 110), Accent = Color3.fromRGB(215, 60, 60) }
+
 local Themes = {
     ["Classic"] = { Panel = Color3.fromRGB(255,255,255), PanelT = 0.45, Comp = Color3.fromRGB(255,255,255), CompT = 0.35, Text = Color3.fromRGB(70,70,70), Dim = Color3.fromRGB(110,110,110), Accent = Color3.fromRGB(215,60,60), Stroke = Color3.fromRGB(160,160,160), BorderRainbow = true, Border = Color3.fromRGB(215,60,60) },
     ["DeepBlue"] = { Panel = Color3.fromRGB(16,24,45), PanelT = 0.1, Comp = Color3.fromRGB(45,70,120), CompT = 0.15, Text = Color3.fromRGB(215,230,255), Dim = Color3.fromRGB(130,160,200), Accent = Color3.fromRGB(70,150,255), Stroke = Color3.fromRGB(90,120,170), BorderRainbow = false, Border = Color3.fromRGB(70,150,255) },
@@ -509,7 +507,7 @@ end
 
 local function MakeToggle(parent, text, default, cb, register, group)
     if register == nil then register = true end
-    local host = AsFlow(parent).Add(S(36) + EstW(text) + S(10), S(28))
+    local host = AsFlow(parent).Add(S(36) + EstW(text) + S(10), S(28)) 
     local state = default and true or false
     local row = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Parent = host })
     local offColor = Color3.fromRGB(120, 120, 120)
@@ -575,7 +573,7 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
         setRatio((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, fire)
     end
     setRatio((default - min) / (max - min), false)
-    track.InputBegan:Connect(function(inp)
+    track.InputBegan:Connect(function(inp) 
         if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
             dragging = true; updateFromX(inp.Position.X, true)
         end
@@ -598,6 +596,7 @@ end
 
 local openDropdown = nil
 local function CloseDropdown() if openDropdown then openDropdown.Visible = false; openDropdown = nil end end
+
 UserInputService.InputBegan:Connect(function(inp)
     if openDropdown and (inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch) then
         local p = inp.Position; local lp = openDropdown.AbsolutePosition; local ls = openDropdown.AbsoluteSize
@@ -695,6 +694,7 @@ local function ApplyAll()
         for _, d in ipairs(ScreenGui:GetDescendants()) do TagObj(d); ApplyObj(d) end
     end
 end
+
 local apDirty = false
 RunService.Heartbeat:Connect(function() if apDirty then apDirty = false; ApplyAll() end end)
 local function QueueApply() apDirty = true end
@@ -731,6 +731,7 @@ end
 
 local pickerTarget = "UI bottom"
 local pickerInfoLabel = nil
+
 local function MakeColorPicker(parent)
     local holder = Create("Frame", {
         Size = UDim2.new(1, -S(8), 0, S(88)), BackgroundColor3 = Color3.fromRGB(40, 40, 40),
@@ -871,6 +872,7 @@ end
 
 local AvatarWorld = nil
 Lib.AvatarWorld = AvatarWorld
+
 local function LoadAvatar()
     if not AvatarWorld then return end
     for _, c in ipairs(AvatarWorld:GetChildren()) do if c:IsA("Model") then c:Destroy() end end
@@ -997,7 +999,7 @@ function Lib:Initialize(opts)
         topButtons[j] = b; SafeClick(b, function() SelectSub(j) end)
     end
     local ballSize = S(56)
-    local Ball = Create("TextButton", { Size = UDim2.fromOffset(ballSize, ballSize), Position = UDim2.fromOffset(S(14), (vpSize.Y - ballSize) / 2), BackgroundTransparency = 1, Text = " ", AutoButtonColor = false, Parent = ScreenGui })
+    local Ball = Create("TextButton", { Size = UDim2.fromOffset(ballSize, ballSize), Position = UDim2.fromOffset(S(14), (vpSize.Y - ballSize) / 2), BackgroundTransparency = 1, Text = "  ", AutoButtonColor = false, Parent = ScreenGui })
     local BallRing = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Parent = Ball }); AddCorner(BallRing, ballSize / 2)
     local ringStroke = Create("UIStroke", { Thickness = math.max(2, S(3)), Color = COL.White }, BallRing)
     local ringGrad = Create("UIGradient", { Rotation = 0, Color = RAINBOW_SEQ }, ringStroke); table.insert(rainbowGrads, ringGrad)
@@ -1040,16 +1042,13 @@ end
 local function FindPageIndices(category, sub)
     category = Trim(category)
     sub = Trim(sub)
-
     local mNames = Lib._mainNames or { "Info", "ESP", "FE", "ScriptHub" }
-
     local sSets = Lib._subNameSets or {
         { "Annc", "Other", "Config", "Theme" },
         { "ESP", "Nor yet", "Not yet", "Not yet" },
         { "Movement", "Character", "World", "Practical" },
         { "RealYoHub", "Keyless Script", "Keys Script", "Admin" },
     }
-
     for m, mn in ipairs(mNames) do
         if Trim(mn) == category then
             for j, sn in ipairs(sSets[m] or {}) do
@@ -1057,51 +1056,48 @@ local function FindPageIndices(category, sub)
                     return m, j
                 end
             end
-
             return m, nil
         end
     end
-
     return nil, nil
 end
 
 local BridgeMeta = {}
 BridgeMeta.__index = BridgeMeta
+
 function BridgeMeta:UsePageIndex(m, j, mode)
     mode = Trim(mode or "Replace")
-
     local scroll = self.UI.GetScroll(m, j)
     if not scroll then
         return false, "page_not_ready"
     end
-
     if mode ~= "Append" then
         for _, c in ipairs(scroll:GetChildren()) do
             if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then
                 c:Destroy()
             end
         end
-
         self.UI:ClearFlowCache(scroll)
     end
-
     self.Host = scroll
     self.MainIndex = m
     self.SubIndex = j
-
     return true
 end
+
 function BridgeMeta:Focus()
     if self.MainIndex and self.UI._selectMain then
         self.UI._selectMain(self.MainIndex)
         self.UI._selectSub(self.SubIndex)
     end
 end
+
 function BridgeMeta:Grid()
     local g = self.UI.CreateGrid(self.Host)
     self.Host = g
     return g
 end
+
 function BridgeMeta:ClearPage()
     local scroll = self.UI.GetScroll(self.MainIndex, self.SubIndex)
     if scroll then
@@ -1112,11 +1108,12 @@ function BridgeMeta:ClearPage()
     end
     self.Host = scroll
 end
+
 function BridgeMeta:Create(comp)
     if type(comp) ~= "table" then return nil, "component_invalid" end
     local kind = comp.Type or comp.type
     local host = comp.Host or self.Host
-    local text = comp.Text or comp.text or " "
+    local text = comp.Text or comp.text or ""
     local cb = comp.Callback or comp.callback or comp.OnClick or comp.OnChange
     local group = comp.Group
     if kind == "Label" or kind == "Text" then
@@ -1133,12 +1130,13 @@ function BridgeMeta:Create(comp)
         local opts = comp.Options or {}
         return self.UI.MakeDropdown(host, text, opts, comp.Default or opts[1], cb)
     elseif kind == "TextBox" or kind == "Input" then
-        return self.UI.MakeTextBox(host, comp.Placeholder or text, comp.Default or " ")
+        return self.UI.MakeTextBox(host, comp.Placeholder or text, comp.Default or "")
     elseif kind == "Grid" then
         return self:Grid()
     end
     return nil, "component_unknown: " .. tostring(kind)
 end
+
 function BridgeMeta:Label(text, opts) opts = opts or {}; return self:Create({ Type = "Label", Text = text, Color = opts.Color, Size = opts.Size, Host = opts.Host }) end
 function BridgeMeta:Section(text, opts) opts = opts or {}; return self:Create({ Type = "Section", Text = text, Host = opts.Host }) end
 function BridgeMeta:Button(text, cb, opts) opts = opts or {}; return self:Create({ Type = "Button", Text = text, Callback = cb, Host = opts.Host }) end
@@ -1160,6 +1158,7 @@ function Lib:RenameMain(i, newName)
     end
     return false
 end
+
 function Lib:RenameSub(m, j, newName)
     if Lib._subNameSets and Lib._subNameSets[m] and Lib._subNameSets[m][j] then
         Lib._subNameSets[m][j] = newName
