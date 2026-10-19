@@ -251,7 +251,7 @@ local function BuildGunModded(A)
 
     -- 6. 绘制主功能
     if #coreKeys > 0 then
-        A:Label("--- 主功能 ---")
+        A:Label("--- Main ---")
         for _, key in ipairs(coreKeys) do
             renderKey(key)
         end
@@ -259,7 +259,7 @@ local function BuildGunModded(A)
 
     -- 7. 绘制进阶功能
     if #extraKeys > 0 then
-        A:Label("--- 进阶功能 ---")
+        A:Label("--- Advanced ---")
         for _, key in ipairs(extraKeys) do
             renderKey(key)
         end
