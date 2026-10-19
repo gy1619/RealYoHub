@@ -158,54 +158,48 @@ Lib.License = License
 
 -- ✅✅✅ 优化 Config 系统 (支持分组/嵌套) ✅✅✅
 local SettingRegistry = {}
-local function RegisterSetting(name, kind, get, set, group)
-    table.insert(SettingRegistry, { name = name, kind = kind, get = get, set = set, group = group })
+local autoSaveTask = nil
+
+-- 加入 default 参数，用于重置
+local function RegisterSetting(name, kind, get, set, group, default)
+    table.insert(SettingRegistry, { name = name, kind = kind, get = get, set = set, group = group, default = default })
 end
 Lib.RegisterSetting = RegisterSetting
-function Lib:PurgeSettings(group)
-    for i = #SettingRegistry, 1, -1 do
-        if SettingRegistry[i].group == group then
-            table.remove(SettingRegistry, i)
-        end
-    end
-end
 
-local CFG_DIR = "RealYo_Configs"
-local AUTO_FILE = CFG_DIR .. "/autoload.json"
-
-local function FileSupport()
-    return type(writefile) == "function"
-        and type(readfile) == "function"
-        and type(isfile) == "function"
-end
-
-local function EnsureFolder()
-    pcall(function()
-        if type(makefolder) == "function" and not isfolder(CFG_DIR) then
-            makefolder(CFG_DIR)
-        end
-    end)
-end
-
-local function ListConfigNames()
-    local names = {}
-
-    pcall(function()
-        if type(listfiles) == "function" then
-            for _, p in ipairs(listfiles(CFG_DIR)) do
-                local path = tostring(p):gsub("\\", "/")
-                local n = path:match("([^/]+)%.json$")
-
-                if n and n ~= "autoload" then
-                    table.insert(names, n)
-                end
+-- 自动保存触发器
+local function TriggerAutoSave()
+    if type(writefile) ~= "function" then return end
+    if autoSaveTask then task.cancel(autoSaveTask) end
+    autoSaveTask = task.delay(1.0, function()
+        local data = {}
+        for _, e in ipairs(SettingRegistry) do
+            local val = e.get()
+            if e.group then
+                if not data[e.group] then data[e.group] = {} end
+                data[e.group][e.name] = val
+            else
+                data[e.name] = val
             end
         end
+        EnsureFolder()
+        pcall(function() writefile(CFG_DIR .. "/autosave.json", HttpService:JSONEncode(data)) end)
     end)
-
-    return names
 end
-Lib.ListConfigNames = ListConfigNames
+
+-- 一键重置并清理配置
+function Lib:ResetAllSettings()
+    if type(delfile) == "function" and type(isfile) == "function" then
+        if isfile(CFG_DIR .. "/autosave.json") then
+            pcall(function() delfile(CFG_DIR .. "/autosave.json") end)
+        end
+    end
+    for _, e in ipairs(SettingRegistry) do
+        if e.default ~= nil then
+            pcall(e.set, e.default)
+        end
+    end
+    Toast("Auto-save cleared & reset to default")
+end
 
 local ScreenGui = nil
 local ToastHolder = nil
@@ -554,10 +548,13 @@ local function MakeToggle(parent, text, default, cb, register, group)
         if v == state then return end
         state = v
         box.BackgroundColor3 = state and AP.Accent or offColor
-        if fire and cb then cb(state) end
+        if fire and cb then 
+            cb(state) 
+            TriggerAutoSave() -- ✅ 触发保存
+        end
     end
     SafeClick(row, function() apply(not state, true) end)
-    if register then RegisterSetting(text, "toggle", function() return state end, function(v) apply(v, true) end, group) end
+    if register then RegisterSetting(text, "toggle", function() return state end, function(v) apply(v, true) end, group, default) end
     return row
 end
 
@@ -604,7 +601,10 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
         knob.Position = UDim2.new(r, -S(6), 0.5, -S(6))
         currentVal = math.floor(min + (max - min) * r + 0.5)
         valBtn.Text = tostring(currentVal)
-        if fire and cb then cb(currentVal) end
+        if fire and cb then 
+            cb(currentVal) 
+            TriggerAutoSave() -- ✅ 触发保存
+        end
     end
     
     local function updateFromX(x, fire)
@@ -667,10 +667,10 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
     
     RegisterSetting(text, "slider", function() return currentVal end, function(v)
         v = tonumber(v) or default
-        if v > max then max = v end -- ✅ 加载配置时，如果存的值大于 max，也自动扩容
+        if v > max then max = v end 
         v = math.clamp(v, min, max)
         setRatio((v - min) / (max - min), true)
-    end, group)
+    end, group, default)
 end
 
 local openDropdown = nil
@@ -761,7 +761,18 @@ local function ApplyObj(d)
     elseif role == "accenttext" then d.TextColor3 = AP.Accent
     elseif role == "accentbg" then d.BackgroundColor3 = AP.Accent
     elseif role == "stroke" then d.Color = AP.Stroke
-    elseif role == "rainbow" then local g = d:FindFirstChildOfClass("UIGradient"); if g then if AP.BorderRainbow then g.Color = RAINBOW_SEQ else g.Color = ColorSequence.new(AP.Border, AP.Border) end end end
+    elseif role == "rainbow" then 
+        local g = d:FindFirstChildOfClass("UIGradient"); 
+        if g then 
+            if g:GetAttribute("IsBallRing") then
+                g.Color = RAINBOW_SEQ -- 悬浮球固定彩虹
+            elseif AP.BorderRainbow then 
+                g.Color = RAINBOW_SEQ 
+            else 
+                g.Color = ColorSequence.new(AP.Border, AP.Border) 
+            end 
+        end 
+    end
 end
 
 local function ApplyAll()
@@ -1078,6 +1089,7 @@ function Lib:Initialize(opts)
     local BallRing = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Parent = Ball }); AddCorner(BallRing, ballSize / 2)
     local ringStroke = Create("UIStroke", { Thickness = math.max(2, S(3)), Color = COL.White }, BallRing)
     local ringGrad = Create("UIGradient", { Rotation = 0, Color = RAINBOW_SEQ }, ringStroke); table.insert(rainbowGrads, ringGrad)
+    ringGrad:SetAttribute("IsBallRing", true) -- ✅ 悬浮球彩虹固定标记
     local discOuter = Create("Frame", { Size = UDim2.fromOffset(ballSize * 0.76, ballSize * 0.76), Position = UDim2.new(0.5, -ballSize * 0.38, 0.5, -ballSize * 0.38), BackgroundColor3 = Color3.fromRGB(110, 220, 70), Parent = Ball }); AddCorner(discOuter, ballSize)
     local discMid = Create("Frame", { Size = UDim2.fromOffset(ballSize * 0.52, ballSize * 0.52), Position = UDim2.new(0.5, -ballSize * 0.26, 0.5, -ballSize * 0.26), BackgroundColor3 = Color3.fromRGB(200, 230, 60), Parent = Ball }); AddCorner(discMid, ballSize)
     local discCore = Create("Frame", { Size = UDim2.fromOffset(ballSize * 0.26, ballSize * 0.26), Position = UDim2.new(0.5, -ballSize * 0.13, 0.5, -ballSize * 0.13), BackgroundColor3 = Color3.fromRGB(240, 90, 40), Parent = Ball }); AddCorner(discCore, ballSize)
@@ -1103,23 +1115,45 @@ function Lib:Initialize(opts)
     self.SetTargetColor = SetTargetColor
     self.ApplyFont = ApplyFont
     self.GetScroll = function(m, j)
-    local pg = pages[m] and pages[m][j]
-    if not pg then return nil end
-    local sc = pg:FindFirstChildOfClass("ScrollingFrame")
-    if not sc then
-        warn(("[RealYoUI] GetScroll: pages[%d][%d] lost its scroll, auto-recreate"):format(m, j))
-        sc = Create("ScrollingFrame", {
-            Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1,
-            AutomaticCanvasSize = Enum.AutomaticSize.Y,
-            ScrollBarThickness = math.max(2, S(3)),
-            ScrollBarImageColor3 = Color3.fromRGB(120, 120, 120),
-            Parent = pg,
-        })
-        Create("UIListLayout", { FillDirection = Enum.FillDirection.Vertical, Padding = UDim.new(0, S(8)) }, sc)
-        Create("UIPadding", { PaddingTop = UDim.new(0, S(10)), PaddingLeft = UDim.new(0, S(6)), PaddingRight = UDim.new(0, S(6)), PaddingBottom = UDim.new(0, S(10)) }, sc)
+        local pg = pages[m] and pages[m][j]
+        if not pg then return nil end
+        local sc = pg:FindFirstChildOfClass("ScrollingFrame")
+        if not sc then
+            warn(("[RealYoUI] GetScroll: pages[%d][%d] lost its scroll, auto-recreate"):format(m, j))
+            sc = Create("ScrollingFrame", {
+                Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1,
+                AutomaticCanvasSize = Enum.AutomaticSize.Y,
+                ScrollBarThickness = math.max(2, S(3)),
+                ScrollBarImageColor3 = Color3.fromRGB(120, 120, 120),
+                Parent = pg,
+            })
+            Create("UIListLayout", { FillDirection = Enum.FillDirection.Vertical, Padding = UDim.new(0, S(8)) }, sc)
+            Create("UIPadding", { PaddingTop = UDim.new(0, S(10)), PaddingLeft = UDim.new(0, S(6)), PaddingRight = UDim.new(0, S(6)), PaddingBottom = UDim.new(0, S(10)) }, sc)
+        end
+        return sc
     end
-    return sc
-end
+    
+    -- ✅ 自动加载 autosave.json
+    if type(isfile) == "function" and isfile(CFG_DIR .. "/autosave.json") then
+        task.delay(0.2, function()
+            local ok, raw = pcall(readfile, CFG_DIR .. "/autosave.json")
+            if ok and raw then
+                local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
+                if ok2 and type(data) == "table" then
+                    for _, e in ipairs(SettingRegistry) do
+                        local val = nil
+                        if e.group and type(data[e.group]) == "table" then
+                            val = data[e.group][e.name]
+                        else
+                            val = data[e.name]
+                        end
+                        if val ~= nil then pcall(e.set, val) end
+                    end
+                end
+            end
+        end)
+    end
+
     self.Initialized = true
     return self
 end
