@@ -35,14 +35,12 @@ function Lib:DisplaceTab(highIndex, lowIndex)
         local srcScroll = self.GetScroll(highIndex, subIdx)
         local dstScroll = self.GetScroll(lowIndex, subIdx)
         if srcScroll and dstScroll then
-            -- ✅ 先清空目标页原有组件，避免换页后新旧混叠
             for _, child in ipairs(dstScroll:GetChildren()) do
                 if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
                     child:Destroy()
                 end
             end
             self:ClearFlowCache(dstScroll)
-            -- 再把源页内容整体搬过去
             for _, child in ipairs(srcScroll:GetChildren()) do
                 if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
                     child.Parent = dstScroll
@@ -173,17 +171,23 @@ local License = {
 }
 Lib.License = License
 
--- ✅✅✅ 优化 Config 系统 (支持分组/嵌套) ✅✅✅
+-- ✅✅✅ 优化 Config 系统 (支持分组/嵌套、自动保存) ✅✅✅
 local SettingRegistry = {}
 local autoSaveTask = nil
 
--- 加入 default 参数，用于重置
 local function RegisterSetting(name, kind, get, set, group, default)
     table.insert(SettingRegistry, { name = name, kind = kind, get = get, set = set, group = group, default = default })
 end
 Lib.RegisterSetting = RegisterSetting
 
--- 自动保存触发器
+function Lib:PurgeSettings(group)
+    for i = #SettingRegistry, 1, -1 do
+        if SettingRegistry[i].group == group then
+            table.remove(SettingRegistry, i)
+        end
+    end
+end
+
 local function TriggerAutoSave()
     if type(writefile) ~= "function" then return end
     if autoSaveTask then task.cancel(autoSaveTask) end
@@ -203,7 +207,6 @@ local function TriggerAutoSave()
     end)
 end
 
--- 一键重置并清理配置
 function Lib:ResetAllSettings()
     if type(delfile) == "function" and type(isfile) == "function" then
         if isfile(CFG_DIR .. "/autosave.json") then
@@ -217,6 +220,24 @@ function Lib:ResetAllSettings()
     end
     Toast("Auto-save cleared & reset to default")
 end
+
+-- 旧版手动存档兼容保留
+local function ListConfigNames()
+    local names = {}
+    pcall(function()
+        if type(listfiles) == "function" then
+            for _, p in ipairs(listfiles(CFG_DIR)) do
+                local path = tostring(p):gsub("\\", "/")
+                local n = path:match("([^/]+)%.json$")
+                if n and n ~= "autoload" and n ~= "autosave" then
+                    table.insert(names, n)
+                end
+            end
+        end
+    end)
+    return names
+end
+Lib.ListConfigNames = ListConfigNames
 
 local ScreenGui = nil
 local ToastHolder = nil
@@ -567,7 +588,7 @@ local function MakeToggle(parent, text, default, cb, register, group)
         box.BackgroundColor3 = state and AP.Accent or offColor
         if fire and cb then 
             cb(state) 
-            TriggerAutoSave() -- ✅ 触发保存
+            TriggerAutoSave() 
         end
     end
     SafeClick(row, function() apply(not state, true) end)
@@ -576,7 +597,6 @@ local function MakeToggle(parent, text, default, cb, register, group)
 end
 
 local function MakeSlider(parent, text, min, max, default, cb, group)
-    -- 动态计算文字宽度，最少 92，如果太长就自己变大
     local textW = math.max(S(92), EstW(text, TS(11)) + S(10))
     local rowW = math.max(S(252), textW + S(160))
     local row = AsFlow(parent).Add(rowW, S(30))
@@ -602,7 +622,6 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
     })
     AddCorner(knob, S(6))
     
-    -- 把原来的 TextLabel 改成 TextButton，方便点击
     local valBtn = Create("TextButton", {
         Size = UDim2.fromOffset(S(34), S(16)), Position = UDim2.new(0, textW + S(126), 0.5, -S(8)), 
         BackgroundTransparency = 1, TextColor3 = COL.TextDark, TextSize = TS(11), Font = Enum.Font.GothamBold,
@@ -620,7 +639,7 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
         valBtn.Text = tostring(currentVal)
         if fire and cb then 
             cb(currentVal) 
-            TriggerAutoSave() -- ✅ 触发保存
+            TriggerAutoSave() 
         end
     end
     
@@ -630,39 +649,30 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
     end
     setRatio((default - min) / (max - min), false)
     
-    -- ✅ 突破上限：点击数字变为输入框
     valBtn.MouseButton1Click:Connect(function()
-        -- 防止重复创建
         if valBtn:FindFirstChildOfClass("TextBox") then return end
-        
         local inputBox = Create("TextBox", {
-            Size = UDim2.new(1, S(10), 1, S(4)), 
-            Position = UDim2.new(0, -S(5), 0, -S(2)),
+            Size = UDim2.new(1, S(10), 1, S(4)), Position = UDim2.new(0, -S(5), 0, -S(2)),
             BackgroundColor3 = Color3.fromRGB(40, 40, 40), BackgroundTransparency = 0.1,
             TextColor3 = Color3.new(1, 1, 1), TextSize = TS(11), Font = Enum.Font.GothamBold,
             Text = tostring(currentVal), TextXAlignment = Enum.TextXAlignment.Right,
             Parent = valBtn, ZIndex = 10, ClearTextOnFocus = false
         })
-        AddCorner(inputBox, S(4))
-        inputBox:CaptureFocus()
+        AddCorner(inputBox, S(4)); inputBox:CaptureFocus()
         
         local function finishEdit()
             if not inputBox or not inputBox.Parent then return end
             local v = tonumber(inputBox.Text)
             inputBox:Destroy()
-            
             if v then
-                v = math.max(min, v) -- 最低不能小于 min
-                if v > max then max = v end -- ✅ 如果大于当前最大值，直接扩容 max
+                v = math.max(min, v)
+                if v > max then max = v end 
                 currentVal = v
-                -- 重新计算比例，确保滑条不乱
                 setRatio((currentVal - min) / (max - min), true)
             else
-                -- 输入了非法字符，恢复原值
                 valBtn.Text = tostring(currentVal)
             end
         end
-        
         inputBox.FocusLost:Connect(finishEdit)
     end)
     
@@ -782,7 +792,7 @@ local function ApplyObj(d)
         local g = d:FindFirstChildOfClass("UIGradient"); 
         if g then 
             if g:GetAttribute("IsBallRing") then
-                g.Color = RAINBOW_SEQ -- 悬浮球固定彩虹
+                g.Color = RAINBOW_SEQ
             elseif AP.BorderRainbow then 
                 g.Color = RAINBOW_SEQ 
             else 
@@ -1106,7 +1116,7 @@ function Lib:Initialize(opts)
     local BallRing = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Parent = Ball }); AddCorner(BallRing, ballSize / 2)
     local ringStroke = Create("UIStroke", { Thickness = math.max(2, S(3)), Color = COL.White }, BallRing)
     local ringGrad = Create("UIGradient", { Rotation = 0, Color = RAINBOW_SEQ }, ringStroke); table.insert(rainbowGrads, ringGrad)
-    ringGrad:SetAttribute("IsBallRing", true) -- ✅ 悬浮球彩虹固定标记
+    ringGrad:SetAttribute("IsBallRing", true) 
     local discOuter = Create("Frame", { Size = UDim2.fromOffset(ballSize * 0.76, ballSize * 0.76), Position = UDim2.new(0.5, -ballSize * 0.38, 0.5, -ballSize * 0.38), BackgroundColor3 = Color3.fromRGB(110, 220, 70), Parent = Ball }); AddCorner(discOuter, ballSize)
     local discMid = Create("Frame", { Size = UDim2.fromOffset(ballSize * 0.52, ballSize * 0.52), Position = UDim2.new(0.5, -ballSize * 0.26, 0.5, -ballSize * 0.26), BackgroundColor3 = Color3.fromRGB(200, 230, 60), Parent = Ball }); AddCorner(discMid, ballSize)
     local discCore = Create("Frame", { Size = UDim2.fromOffset(ballSize * 0.26, ballSize * 0.26), Position = UDim2.new(0.5, -ballSize * 0.13, 0.5, -ballSize * 0.13), BackgroundColor3 = Color3.fromRGB(240, 90, 40), Parent = Ball }); AddCorner(discCore, ballSize)
@@ -1150,7 +1160,7 @@ function Lib:Initialize(opts)
         return sc
     end
     
-        -- ✅ 自动加载 autosave.json
+    -- ✅ 自动加载 autosave.json
     local targetCFG = CFG_DIR or "RealYo_Configs"
     if type(isfile) == "function" and isfile(targetCFG .. "/autosave.json") then
         task.delay(0.2, function()
@@ -1171,7 +1181,6 @@ function Lib:Initialize(opts)
             end
         end)
     end
-
     self.Initialized = true
     return self
 end
