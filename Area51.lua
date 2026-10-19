@@ -178,18 +178,19 @@ local function BuildGunModded(A)
 
     A:Section("Properties for " .. name)
 
-    -- 1. 定义核心功能关键词 (涵盖伤害、射速、弹药、模式)
-    local CORE_PROPS = {
-        BaseDamage = true, FireRate = true, BulletPerShot = true, 
-        MaxClip = true, AmmoPerClip = true, Clips = true, ReloadTime = true,
-        Piercing = true, Lifesteal = true, HeadshotDamageMultiplier = true,
-        Auto = true, ExplosiveEnabled = true, SniperEnabled = true, 
-        ShotgunEnabled = true, BurstFireEnabled = true, MinigunEnabled = true,
-        ChargedShotEnabled = true, DualEnabled = true, FlamingBullet = true,
-        Knockback = true, Spread = true, BulletSpeed = true
+    -- 1. 定义主功能关键词列表（按你想要的排序优先级从上到下）
+    local CORE_ORDER = {
+        "BaseDamage", "FireRate", "BulletPerShot", "MaxClip", "AmmoPerClip", 
+        "Clips", "ReloadTime", "Auto", "BurstFireEnabled", "ShotgunEnabled", 
+        "ExplosiveEnabled", "SniperEnabled", "MinigunEnabled", "ChargedShotEnabled", 
+        "DualEnabled", "Piercing", "HeadshotDamageMultiplier", "Lifesteal", 
+        "Knockback", "Spread", "BulletSpeed", "FlamingBullet"
     }
+    
+    local CORE_SET = {}
+    for i, k in ipairs(CORE_ORDER) do CORE_SET[k] = i end
 
-    -- 2. 定义拉黑名单 (绝对不显示的纯视觉/动画垃圾)
+    -- 2. 定义拉黑名单（绝对不显示的纯视觉/动画垃圾）
     local BLACKLIST = {
         HitSoundIDs = true, BulletColor = true, BulletMaterial = true, 
         BulletSize = true, MuzzleOffset = true, MouseIconID = true,
@@ -202,54 +203,70 @@ local function BuildGunModded(A)
         LimitedClipEnabled = true, DelayBeforeFiring = true, DelayAfterFiring = true, ChargingTime = true
     }
 
-    local keys = {}
+    -- 3. 分离主功能和进阶功能
+    local coreKeys, extraKeys = {}, {}
     for k, v in pairs(setting) do 
-        -- 不是黑名单 且 不是自定义的隐藏属性
         if not BLACKLIST[k] and not k:find("Animation") and not k:find("Sound") then
-            table.insert(keys, k) 
+            if CORE_SET[k] then
+                table.insert(coreKeys, k)
+            else
+                table.insert(extraKeys, k)
+            end
         end
     end
-    -- 排序：核心属性排前面，特殊属性排后面
-    table.sort(keys, function(a, b)
-        local aCore, bCore = CORE_PROPS[a], CORE_PROPS[b]
-        if aCore and not bCore then return true end
-        if not aCore and bCore then return false end
-        return a < b
-    end)
 
-    for _, key in ipairs(keys) do
+    -- 4. 排序
+    -- 主功能按照 CORE_ORDER 的顺序排
+    table.sort(coreKeys, function(a, b) return CORE_SET[a] < CORE_SET[b] end)
+    -- 进阶功能按字母顺序排
+    table.sort(extraKeys)
+
+    -- 5. 渲染辅助函数
+    local function renderKey(key)
         local value = setting[key]
         local t = type(value)
-        local isCore = CORE_PROPS[key]
         
-        -- 如果是核心功能，加个小标记，或者普通功能就放后面
-        local displayName = (isCore and "★ " or "  ") .. key
-
         -- 处理 Desert Eagle 那种 table 类型（无限弹夹）
         if t == "table" and type(value) == "table" then
             if value.v == "inf" then
-                A:Label(displayName .. " = 无限 (Infinity)")
+                A:Label(key .. " = 无限 (Infinity)")
             else
-                A:Label(displayName .. " = [Table]")
+                A:Label(key .. " = [Table]")
             end
         elseif t == "boolean" then
-            A:Toggle(displayName, value, function(v) setting[key] = v end, name)
+            A:Toggle(key, value, function(v) setting[key] = v end, name)
         elseif t == "number" then
             if key:match("ID$") or key:match("Id$") then
-                A:Label(displayName .. " = " .. tostring(value))
+                A:Label(key .. " = " .. tostring(value))
             elseif value == math.floor(value) then
-                A:Slider(displayName, 0, 500, value, function(v) setting[key] = v end, name)
+                A:Slider(key, 0, 500, value, function(v) setting[key] = v end, name)
             else
                 local v100 = math.floor(value * 100 + 0.5)
-                A:Slider(displayName .. " (x0.01)", 0, 500, v100, function(v) setting[key] = v / 100 end, name)
+                A:Slider(key .. " (x0.01)", 0, 500, v100, function(v) setting[key] = v / 100 end, name)
             end
         elseif t == "string" then
-            A:Label(displayName .. " = " .. tostring(value))
+            A:Label(key .. " = " .. tostring(value))
+        end
+    end
+
+    -- 6. 绘制主功能
+    if #coreKeys > 0 then
+        A:Label("--- 主功能 ---")
+        for _, key in ipairs(coreKeys) do
+            renderKey(key)
+        end
+    end
+
+    -- 7. 绘制进阶功能
+    if #extraKeys > 0 then
+        A:Label("--- 进阶功能 ---")
+        for _, key in ipairs(extraKeys) do
+            renderKey(key)
         end
     end
     
     bridge.Host = oldHost
-    Notify("GunMod", "Loaded " .. name .. " (" .. #keys .. " core items)", 3)
+    Notify("GunMod", "Loaded " .. name .. " (" .. #coreKeys + #extraKeys .. " items)", 3)
 end
 
     local function rescan()
