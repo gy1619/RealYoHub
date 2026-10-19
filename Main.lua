@@ -162,14 +162,9 @@ local function HttpGetText(url)
 end
 
 local function LoadFromSource(source)
-    -- 第一步：先过 Luau 方言过滤器 (解决 ~ 位运算问题)
     local fixed = FixLuauCompat(source)
-    
-    -- 第二步：尝试编译
     local fn, err = loadstring(fixed)
     local repaired = false
-    
-    -- 第三步：如果编译失败，再过空格修复引擎，然后再过一次方言过滤
     if type(fn) ~= "function" then
         fixed = FixLuauCompat(RepairSource(fixed))
         local fn2, err2 = loadstring(fixed)
@@ -178,12 +173,26 @@ local function LoadFromSource(source)
         end
         fn = fn2
         repaired = true
-        pcall(function() if setclipboard then setclipboard(fixed) end end)
     end
-    
+
     local ok, ret = pcall(fn)
-    if not ok then return nil, "runtime: " .. tostring(ret) end
-    if repaired then warn("[RealYoUI] remote source was corrupted; auto-repaired (fixed copy -> clipboard)") end
+    if not ok then
+        local errLine = tonumber(tostring(ret):match(":(%d+):"))
+        warn("[RealYoUI] runtime error inside library, repaired=" .. tostring(repaired))
+        if errLine then
+            local lines = {}
+            for l in (fixed .. "\n"):gmatch("([^\n]*)\n") do lines[#lines+1] = l end
+            warn(("----- library source around line %d -----"):format(errLine))
+            for i = math.max(1, errLine - 4), math.min(#lines, errLine + 2) do
+                warn(("%4d| %s"):format(i, lines[i] or ""))
+            end
+            warn("------------------------------------------")
+        end
+        pcall(function() if setclipboard then setclipboard(fixed) end end)
+        warn("[RealYoUI] full repaired source -> clipboard")
+        return nil, "runtime: " .. tostring(ret)
+    end
+    if repaired then warn("[RealYoUI] remote source was corrupted; auto-repaired") end
     return ret, nil
 end
 
