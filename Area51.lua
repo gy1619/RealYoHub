@@ -64,12 +64,17 @@ end
 if AUTO_ACCEPT and HostUI then
     local ok, success, bridgeOrErr = pcall(function()
         return HostUI:RequestGameBridge({
-            Brand = GAME.Brand, 
-            Protocol = HostUI.BridgeProtocol or 2, 
+            Brand = GAME.Brand,
+            Protocol = HostUI.BridgeProtocol or 2,
             Name = GAME.Name,
-            Category = "Info", 
+        
+        -- ✅ 新增弹性协议字段：
+            RequestedCategory = "Info", -- 我希望占据 "Info" 的位置
+            Priority = 90,              -- 我的优先级是 90 (Info 默认是 100，所以会触发偷梁换柱)
+        
+            Category = "Info",          -- 兼容旧字段
             Sub = "Annc ",
-            Mode = "Replace", 
+            Mode = "Replace",
             Focus = false,
         })
     end)
