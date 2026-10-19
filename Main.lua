@@ -1,7 +1,6 @@
 -- Main Script.lua
 local LIB_URL = "https://raw.githubusercontent.com/gy1619/RealYoHub/refs/heads/main/Astool.lua?t=" .. os.time()
 local UI
-
 do
     if shared and shared.RealYoUI then UI = shared.RealYoUI end
     if not UI then
@@ -10,15 +9,21 @@ do
     end
     if not UI and _G and _G.RealYoUI then UI = _G.RealYoUI end
 end
-
 if not UI or not UI.IsRealYoUI then
-    warn("[RealYoUI] UI library load failed. Check GitHub URL or syntax.")
+    warn("[RealYoUI] UI library load failed.")
     return
 end
 
+-- ✅ 核心：由宿主定义 Tab 结构和优先级
 UI:Initialize({
     Title = "RealYo UI",
     Subtitle = "SZE",
+    Tabs = {
+        {Name = "Info", Priority = 100},      -- 最高优先级 (配置/主题)
+        {Name = "ESP", Priority = 80},        -- 高优先级
+        {Name = "FE", Priority = 60},         -- 中优先级
+        {Name = "ScriptHub", Priority = 10}   -- 最低优先级 (最容易被顶替)
+    },
 })
 
 local Players = game:GetService("Players")
@@ -30,40 +35,16 @@ local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 local taskWait = (task and task.wait) or function() return wait() end
 
-local S = UI.S
-local TS = UI.TS
-local Create = UI.Create
-local AddCorner = UI.AddCorner
-local SafeClick = UI.SafeClick
-local RegisterLang = UI.RegisterLang
-local T = UI.T
-local Toast = UI.Toast
-local MakeText = UI.MakeText
-local MakeSection = UI.MakeSection
-local MakeButton = UI.MakeButton
-local MakeTextBox = UI.MakeTextBox
-local MakeToggle = UI.MakeToggle
-local MakeSlider = UI.MakeSlider
-local MakeDropdown = UI.MakeDropdown
-local MakeColorPicker = UI.MakeColorPicker
-local MakeInlineAlphaSlider = UI.MakeInlineAlphaSlider
-local FlowOf = UI.FlowOf
-local CreateGrid = UI.CreateGrid
-local COL = UI.COL
-local License = UI.License
-local DEVICE_ID = UI.DEVICE_ID
-local pages = UI.pages
-local SetLanguage = UI.SetLanguage
-local ApplyTheme = UI.ApplyTheme
-local ApplyFont = UI.ApplyFont
-local LoadAvatar = UI.LoadAvatar
-local ListConfigNames = UI.ListConfigNames
-local SaveConfig = UI.SaveConfig
-local LoadConfig = UI.LoadConfig
-local DeleteConfig = UI.DeleteConfig
-local GetAutoLoad = UI.GetAutoLoad
-local SetAutoLoad = UI.SetAutoLoad
-
+local S = UI.S; local TS = UI.TS; local Create = UI.Create; local AddCorner = UI.AddCorner
+local SafeClick = UI.SafeClick; local Toast = UI.Toast
+local MakeText = UI.MakeText; local MakeSection = UI.MakeSection; local MakeButton = UI.MakeButton
+local MakeTextBox = UI.MakeTextBox; local MakeToggle = UI.MakeToggle; local MakeSlider = UI.MakeSlider
+local MakeDropdown = UI.MakeDropdown; local MakeColorPicker = UI.MakeColorPicker
+local MakeInlineAlphaSlider = UI.MakeInlineAlphaSlider; local FlowOf = UI.FlowOf; local CreateGrid = UI.CreateGrid
+local COL = UI.COL; local License = UI.License; local DEVICE_ID = UI.DEVICE_ID; local pages = UI.pages
+local ApplyTheme = UI.ApplyTheme; local ApplyFont = UI.ApplyFont; local LoadAvatar = UI.LoadAvatar
+local ListConfigNames = UI.ListConfigNames; local SaveConfig = UI.SaveConfig; local LoadConfig = UI.LoadConfig
+local DeleteConfig = UI.DeleteConfig; local GetAutoLoad = UI.GetAutoLoad; local SetAutoLoad = UI.SetAutoLoad
 local function ScrollOf(page) return page:FindFirstChildOfClass("ScrollingFrame") end
 
 local Mods = {
@@ -178,37 +159,33 @@ local function UpdatePreviewESP()
 end
 RunService.RenderStepped:Connect(function() if ESP.Rainbow and UI.UIVisible then UpdatePreviewESP() end end)
 
+-- ✅ 页面构建 (注意：如果 Info 被顶替，pages[1] 的内容会被移走，但这里初始化时还是按原样构建)
 local home = ScrollOf(pages[1][1])
 MakeText(home, "Status: " .. License.Status, COL.Green)
 MakeButton(home, "Join Discord", function() setclipboard("https://discord.gg/SjRufjdF33") end)
-
 local uidRow = FlowOf(home).AddFull(S(26))
 Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, S(6)) }, uidRow)
 Create("TextLabel", { Size = UDim2.fromOffset(S(60), S(26)), BackgroundTransparency = 1, Text = "HWID:", TextColor3 = COL.Green, TextSize = TS(12), Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, Parent = uidRow })
 Create("TextLabel", { Size = UDim2.fromOffset(S(240), S(26)), BackgroundTransparency = 1, Text = DEVICE_ID, TextColor3 = COL.Red, TextSize = TS(12), Font = Enum.Font.Code, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = uidRow })
 local copyBtn = Create("TextButton", { Size = UDim2.fromOffset(S(50), S(24)), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 0.35, Text = "Copy", TextColor3 = COL.TextDark, TextSize = TS(12), Font = Enum.Font.GothamMedium, AutoButtonColor = false, Parent = uidRow })
-
 AddCorner(copyBtn, S(4))
 SafeClick(copyBtn, function() if setclipboard then pcall(function() setclipboard(DEVICE_ID) end); Toast("HWID Replicated") else Toast("Executer not support copy") end end)
-
-
 MakeText(home, "Left time: " .. License.Remain, COL.Green)
 MakeText(home, "SZE internal", COL.Red)
-MakeText(home, "welcome,Scripts are temporarily free.", COL.TextDark)
+MakeText(home, "welcome, Scripts are temporarily free.", COL.TextDark)
 
 local sc12 = ScrollOf(pages[1][2])
 MakeSection(sc12, "Not yet")
-local langGrid = CreateGrid(sc12)
 MakeText(sc12, "SZELON0 on top", COL.TextDim)
 
 local cfg = ScrollOf(pages[1][3])
 MakeSection(cfg, "Config")
 local cfgNameBox = MakeTextBox(cfg, "Config name", "default")
 local initNames = ListConfigNames()
-local cfgDrop = MakeDropdown(cfg, "Config choose", (#initNames > 0) and initNames or { "No config" }, (#initNames > 0) and initNames[1] or "No config", function(opt) if opt ~= "No config" then cfgNameBox.Text = opt end end)
+local cfgDrop = MakeDropdown(cfg, "Config choose", (#initNames > 0) and initNames or {"No config"}, (#initNames > 0) and initNames[1] or "No config", function(opt) if opt ~= "No config" then cfgNameBox.Text = opt end end)
 local cfgGrid = CreateGrid(cfg)
 MakeButton(cfgGrid, "Save config", function() local n = cfgNameBox.Text:gsub("^%s+", ""):gsub("%s+$", ""); if n == "" then Toast("input name") return end; SaveConfig(n); cfgDrop.SetOptions(ListConfigNames()) end)
-MakeButton(cfgGrid, "Open conig", function() local n = cfgNameBox.Text:gsub("^%s+", ""):gsub("%s+$", ""); if n == "" then Toast("input name") return end; LoadConfig(n) end)
+MakeButton(cfgGrid, "Open config", function() local n = cfgNameBox.Text:gsub("^%s+", ""):gsub("%s+$", ""); if n == "" then Toast("input name") return end; LoadConfig(n) end)
 MakeButton(cfgGrid, "Delete config", function() local n = cfgNameBox.Text:gsub("^%s+", ""):gsub("%s+$", ""); if n == "" then Toast("input name") return end; DeleteConfig(n); cfgDrop.SetOptions(ListConfigNames()) end)
 MakeButton(cfgGrid, "refresh list", function() cfgDrop.SetOptions(ListConfigNames()); Toast("refreshed") end)
 local autoOn0, autoName0 = GetAutoLoad()
@@ -217,18 +194,15 @@ MakeText(cfg, "Config save in directory RealYo_Configs", COL.TextDim)
 
 local sc14 = ScrollOf(pages[1][4])
 MakeSection(sc14, "theme")
-local themeOptions = { "Classic", "Deep Blue", "Cyber", "DeepRed" }
-MakeDropdown(sc14, "theme", themeOptions, "Classic", function(opt)
-    local nameMap = { Classic = "Classic", ["Deep Blue"] = "Deep Blue", Cyber = "Cyber", DeepRed = "DeepRed" }
-    ApplyTheme(nameMap[opt] or opt)
-end)
+local themeOptions = {"Classic", "DeepBlue", "Cyber", "Vampire"}
+MakeDropdown(sc14, "theme", themeOptions, "Classic", function(opt) ApplyTheme(opt) end)
 MakeInlineAlphaSlider(FlowOf(sc14))
-MakeDropdown(sc14, "Frame", { "Rainbow", "Monocolour" }, "Rainbow", function(o) UI.AP.BorderRainbow = (o == "Rainbow"); Toast(UI.AP.BorderRainbow and "Frame: Rainbow" or "Frame: Monocolour") end)
-MakeDropdown(sc14, "Font", { "Gotham", "SciFi", "SourceSans", "FredokaOne", "Code", "Ubuntu", "Bangers", "Merriweather" }, "Gotham", ApplyFont)
+MakeDropdown(sc14, "Frame", {"Rainbow", "Monocolour"}, "Rainbow", function(o) UI.AP.BorderRainbow = (o == "Rainbow"); Toast(UI.AP.BorderRainbow and "Frame: Rainbow" or "Frame: Monocolour") end)
+MakeDropdown(sc14, "Font", {"Gotham", "SciFi", "SourceSans", "FredokaOne", "Code", "Ubuntu", "Bangers", "Merriweather"}, "Gotham", ApplyFont)
 MakeSection(sc14, "RGB")
 local pickerTarget = "UI bottom"
 local pickerInfoLabel = nil
-MakeDropdown(sc14, "Color target", { "UI bottom", "package", "Main text", "Dark text", "Emphasis color", "Frame" }, "UI bottom", function(o) pickerTarget = o; if pickerInfoLabel then pickerInfoLabel.Text = "Target: " .. o end; Toast("Color target" .. ": " .. o) end)
+MakeDropdown(sc14, "Color target", {"UI bottom", "package", "main text", "dark text", "emphasis color", "frame"}, "UI bottom", function(o) pickerTarget = o; if pickerInfoLabel then pickerInfoLabel.Text = "Target: " .. o end; Toast("Color target: " .. o) end)
 pickerInfoLabel = MakeText(sc14, "Target: UI bottom", COL.TextDim)
 MakeColorPicker(sc14)
 
@@ -276,9 +250,8 @@ MakeToggle(worldGrid, "Lock time", false, function(on) Mods.TimeLock = on end)
 MakeSlider(world, "Time", 0, 24, 14, function(v) Mods.Time = v end)
 
 local util = ScrollOf(pages[3][4])
-MakeButton(util, "Copy current location", function() local root = GetRoot(); if not root then Toast("角色未就緒") return end; if setclipboard then pcall(function() setclipboard(tostring(root.CFrame)) end); Toast("copy") else Toast("注入器不支持剪貼板") end end)
+MakeButton(util, "Copy current location", function() local root = GetRoot(); if not root then Toast("角色未就绪") return end; if setclipboard then pcall(function() setclipboard(tostring(root.CFrame)) end); Toast("copy") else Toast("注入器不支持剪贴板") end end)
 MakeButton(util, "Rejoin", function() pcall(function() TeleportService:Teleport(game.PlaceId) end) end)
-
 
 local script1 = ScrollOf(pages[4][1])
 MakeButton(script1, "Survive in area 51!", function()
@@ -286,10 +259,6 @@ MakeButton(script1, "Survive in area 51!", function()
     local ok, err = pcall(function() loadstring(game:HttpGet(url))() end)
     Toast(ok and "Executed" or ("Fail: " .. tostring(err):sub(1, 60)))
 end)
-MakeButton(script1, "BrookHaven RP", function() local ry = pcall(function() loadstring(game:HttpGet("https://gist.githubusercontent.com/gy1619/29ee3701d50f59ee4061c5a96d7a79c5/raw/bf871ba30f57e8929a4d847841114f31d9f73894/bhhrp.lua"))() end); Toast(ry and "Executed" or "Fail") end)
-MakeButton(script1, "My Restaurant", function() local ry = pcall(function() loadstring(game:HttpGet("https://gist.githubusercontent.com/gy1619/a44f37202fd255c36bfd2e05b66204bd/raw/374703400612786c6ad8b1dbe57d9de42f3c879b/My%20Restaurant.lua"))() end); Toast(ry and "Executed" or "Fail") end)
-MakeButton(script1, "Cut Grass", function() local ry = pcall(function() loadstring(game:HttpGet("https://gist.githubusercontent.com/gy1619/58841eb6cb738a4c9fffeaee95d8d6c8/raw/77d5043da62b0a092f0416787d6ca284899d8ece/Cut%20Grass.lua"))() end); Toast(ry and "Executed" or "Fail") end)
-MakeButton(script1, "Poop a Big Poop", function() local ry = pcall(function() loadstring(game:HttpGet("https://gist.githubusercontent.com/gy1619/ddd84a349399d4059acd9778c79b73c4/raw/403cdb6417fc2a5af213d0eaafde1a643b1d6155/pabp.lua"))() end); Toast(ry and "Executed" or "Fail") end)
 MakeText(script1, "RealYoHub", COL.TextDim)
 
 local script2 = ScrollOf(pages[4][2]); MakeText(script2, "Not Yet", COL.TextDim)
@@ -303,6 +272,6 @@ task.delay(2.5, UpdatePreviewESP)
 LocalPlayer.CharacterAdded:Connect(function() taskWait(2); LoadAvatar() end)
 if autoOn0 and autoName0 then task.delay(1, function() LoadConfig(autoName0) end) end
 taskWait(0.5)
-Toast("Loaded，HWID: " .. DEVICE_ID)
+Toast("Loaded, HWID: " .. DEVICE_ID)
 taskWait(0.5)
 Toast("Loaded Successfully")
