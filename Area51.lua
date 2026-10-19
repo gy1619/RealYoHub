@@ -86,10 +86,10 @@ if AUTO_ACCEPT and HostUI then
 end
 
 if Runtime.Mode == "Host" then
-    SafeCall("RenameMain4", function() HostUI:RenameMain(4, "RealYoHub") end)
-    SafeCall("RenameSub41", function() HostUI:RenameSub(4, 1, "Area 51") end)
-    SafeCall("RenameSub42", function() HostUI:RenameSub(4, 2, "Gun Modded") end)
-    SafeCall("RenameSub43", function() HostUI:RenameSub(4, 3, "Teleport") end)
+    SafeCall("RenameMain4", function() HostUI:RenameMain(1, "RealYoHub") end)
+    SafeCall("RenameSub41", function() HostUI:RenameSub(1, 1, "Area 51") end)
+    SafeCall("RenameSub42", function() HostUI:RenameSub(1, 2, "Gun Modded") end)
+    SafeCall("RenameSub43", function() HostUI:RenameSub(1, 3, "Teleport") end)
     SafeCall("RenameMain2", function() HostUI:RenameMain(2, "Universal Tools") end)
     SafeCall("RenameSub22", function() HostUI:RenameSub(2, 2, "FE Tools") end)
 end
@@ -514,9 +514,9 @@ end
 
 if Runtime.Mode == "Host" then
     local bridge = Runtime.Bridge
-    SafeCall("Build Area51", function() bridge:UsePageIndex(4, 1, "Replace"); BuildArea51(BridgeAdapter(bridge)) end)
-    SafeCall("Build GunModded", function() bridge:UsePageIndex(4, 2, "Replace"); BuildGunModded(BridgeAdapter(bridge)) end)
-    SafeCall("Build Teleport", function() bridge:UsePageIndex(4, 3, "Replace"); BuildTeleport(BridgeAdapter(bridge)) end)
+    SafeCall("Build Area51", function() bridge:UsePageIndex(1, 1, "Replace"); BuildArea51(BridgeAdapter(bridge)) end)
+    SafeCall("Build GunModded", function() bridge:UsePageIndex(1, 2, "Replace"); BuildGunModded(BridgeAdapter(bridge)) end)
+    SafeCall("Build Teleport", function() bridge:UsePageIndex(1, 3, "Replace"); BuildTeleport(BridgeAdapter(bridge)) end)
     SafeCall("Build FETools", function() bridge:UsePageIndex(2, 2, "Replace"); BuildFETools(BridgeAdapter(bridge)) end)
     SafeCall("Focus", function() bridge:Focus() end)
     Notify("RealYoHub", "Handshake OK - hosted by RealYoUI", 6, "crown")
