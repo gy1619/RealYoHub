@@ -1,10 +1,49 @@
--- Main Script.lua (loader v2: 自动修复空格/断词)
+-- Main Script.lua (loader v3: 空格修复 + Luau 方言兼容过滤)
 local LIB_URLS = {
     "https://raw.githubusercontent.com/gy1619/RealYoHub/refs/heads/main/Astool.lua?t=" .. tostring(os.time()),
     "https://raw.githubusercontent.com/gy1619/RealYoHub/main/Astool.lua?t=" .. tostring(os.time()),
 }
 
--- ========== 空格修复引擎 ==========
+-- ========== 1. Luau 方言兼容过滤器 (专治 AI 的 Lua 5.3 幻觉) ==========
+local function FixLuauCompat(src)
+    local count = 0
+    
+    -- 规则 A: 把 Lua 5.3 的位异或 (a ~ b) 转换成 Roblox 的 bit32.bxor(a, b)
+    -- 匹配模式: (变量 ~ 变量) -> bit32.bxor(变量, 变量)
+    -- 注意: 不会误伤 ~= (不等于)，因为 ~= 后面跟的是 =，而我们的模式要求 ~ 后面跟的是字母/数字/下划线
+    src = src:gsub("%(([%w_%.]+)%s*~%s*([%w_%.]+)%s*%)", function(a, b)
+        count = count + 1
+        return "bit32.bxor(" .. a .. ", " .. b .. ")"
+    end)
+    
+    -- 规则 B: 把 Lua 5.3 的位移 (a << b) / (a >> b) 转换成 bit32.lshift / bit32.rshift
+    src = src:gsub("%(([%w_%.]+)%s*<<%s*([%w_%.]+)%s*%)", function(a, b)
+        count = count + 1
+        return "bit32.lshift(" .. a .. ", " .. b .. ")"
+    end)
+    src = src:gsub("%(([%w_%.]+)%s*>>%s*([%w_%.]+)%s*%)", function(a, b)
+        count = count + 1
+        return "bit32.rshift(" .. a .. ", " .. b .. ")"
+    end)
+
+    -- 规则 C: 把 Lua 5.3 的位与 (a & b) / 位或 (a | b) 转换 (虽然你代码里没用到，但以防万一)
+    src = src:gsub("%(([%w_%.]+)%s*&%s*([%w_%.]+)%s*%)", function(a, b)
+        count = count + 1
+        return "bit32.band(" .. a .. ", " .. b .. ")"
+    end)
+    src = src:gsub("%(([%w_%.]+)%s*|%s*([%w_%.]+)%s*%)", function(a, b)
+        count = count + 1
+        return "bit32.bor(" .. a .. ", " .. b .. ")"
+    end)
+
+    if count > 0 then
+        warn(("[RealYoUI] Luau Compat Filter: auto-converted %d Lua 5.3 bitwise ops to bit32"):format(count))
+    end
+    
+    return src
+end
+
+-- ========== 2. 空格/断词修复引擎 (保持不变) ==========
 local KW = {}
 for _, w in ipairs({
     "and","break","do","else","elseif","end","false","for","function",
@@ -96,6 +135,7 @@ local function RepairSource(src)
 end
 -- ========== 修复引擎结束 ==========
 
+-- ========== 3. 核心加载逻辑 ==========
 local function PickRealYoUI()
     local candidates = {}
     if shared and shared.RealYoUI then table.insert(candidates, shared.RealYoUI) end
@@ -122,17 +162,25 @@ local function HttpGetText(url)
 end
 
 local function LoadFromSource(source)
-    local fn, err = loadstring(source)
+    -- 第一步：先过 Luau 方言过滤器 (解决 ~ 位运算问题)
+    local fixed = FixLuauCompat(source)
+    
+    -- 第二步：尝试编译
+    local fn, err = loadstring(fixed)
     local repaired = false
+    
+    -- 第三步：如果编译失败，再过空格修复引擎，然后再过一次方言过滤
     if type(fn) ~= "function" then
-        local fixed = RepairSource(source)
+        fixed = FixLuauCompat(RepairSource(fixed))
         local fn2, err2 = loadstring(fixed)
         if type(fn2) ~= "function" then
             return nil, ("raw: %s | repaired: %s"):format(tostring(err), tostring(err2))
         end
-        fn = fn2; repaired = true
+        fn = fn2
+        repaired = true
         pcall(function() if setclipboard then setclipboard(fixed) end end)
     end
+    
     local ok, ret = pcall(fn)
     if not ok then return nil, "runtime: " .. tostring(ret) end
     if repaired then warn("[RealYoUI] remote source was corrupted; auto-repaired (fixed copy -> clipboard)") end
