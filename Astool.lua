@@ -572,16 +572,29 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
         Text = text, TextColor3 = COL.TextDim, TextSize = TS(11), Font = Enum.Font.Gotham,
         TextXAlignment = Enum.TextXAlignment.Left, Parent = row,
     })
+    
     local track = Create("Frame", {
         Size = UDim2.fromOffset(S(120), S(8)), Position = UDim2.new(0, textW + S(4), 0.5, -S(4)),
         BackgroundColor3 = Color3.fromRGB(120, 120, 120), BackgroundTransparency = 0.3, Parent = row,
     })
-    -- ... 中间不动 ...
+    AddCorner(track, S(4))
+    
+    -- 这里的 fill 和 knob 被漏掉了，现在补上
+    local fill = Create("Frame", { BackgroundColor3 = COL.Red, Parent = track })
+    AddCorner(fill, S(4))
+    fill:SetAttribute("accentbg", true)
+    
+    local knob = Create("Frame", {
+        Size = UDim2.fromOffset(S(12), S(12)), BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = 2, Parent = track,
+    })
+    AddCorner(knob, S(6))
+    
     local valLabel = Create("TextLabel", {
         Size = UDim2.fromOffset(S(34), S(16)), Position = UDim2.new(0, textW + S(126), 0.5, -S(8)), BackgroundTransparency = 1,
         TextColor3 = COL.TextDark, TextSize = TS(11), Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Right, Parent = row,
     })
+    
     local currentVal = default
     local dragging = false
     local function setRatio(r, fire)
@@ -592,11 +605,13 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
         valLabel.Text = tostring(currentVal)
         if fire and cb then cb(currentVal) end
     end
+    
     local function updateFromX(x, fire)
         if track.AbsoluteSize.X <= 0 then return end
         setRatio((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, fire)
     end
     setRatio((default - min) / (max - min), false)
+    
     track.InputBegan:Connect(function(inp)
         if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
             dragging = true; updateFromX(inp.Position.X, true)
@@ -612,6 +627,7 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
             dragging = false
         end
     end)
+    
     RegisterSetting(text, "slider", function() return currentVal end, function(v)
         v = math.clamp(tonumber(v) or default, min, max)
         setRatio((v - min) / (max - min), true)
