@@ -579,7 +579,6 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
     })
     AddCorner(track, S(4))
     
-    -- 这里的 fill 和 knob 被漏掉了，现在补上
     local fill = Create("Frame", { BackgroundColor3 = COL.Red, Parent = track })
     AddCorner(fill, S(4))
     fill:SetAttribute("accentbg", true)
@@ -589,20 +588,22 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
     })
     AddCorner(knob, S(6))
     
-    local valLabel = Create("TextLabel", {
-        Size = UDim2.fromOffset(S(34), S(16)), Position = UDim2.new(0, textW + S(126), 0.5, -S(8)), BackgroundTransparency = 1,
-        TextColor3 = COL.TextDark, TextSize = TS(11), Font = Enum.Font.GothamBold,
-        TextXAlignment = Enum.TextXAlignment.Right, Parent = row,
+    -- 把原来的 TextLabel 改成 TextButton，方便点击
+    local valBtn = Create("TextButton", {
+        Size = UDim2.fromOffset(S(34), S(16)), Position = UDim2.new(0, textW + S(126), 0.5, -S(8)), 
+        BackgroundTransparency = 1, TextColor3 = COL.TextDark, TextSize = TS(11), Font = Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Right, Parent = row, Text = tostring(default), AutoButtonColor = false
     })
     
     local currentVal = default
     local dragging = false
+    
     local function setRatio(r, fire)
         r = math.clamp(r, 0, 1)
         fill.Size = UDim2.new(r, 0, 1, 0)
         knob.Position = UDim2.new(r, -S(6), 0.5, -S(6))
         currentVal = math.floor(min + (max - min) * r + 0.5)
-        valLabel.Text = tostring(currentVal)
+        valBtn.Text = tostring(currentVal)
         if fire and cb then cb(currentVal) end
     end
     
@@ -611,6 +612,42 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
         setRatio((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, fire)
     end
     setRatio((default - min) / (max - min), false)
+    
+    -- ✅ 突破上限：点击数字变为输入框
+    valBtn.MouseButton1Click:Connect(function()
+        -- 防止重复创建
+        if valBtn:FindFirstChildOfClass("TextBox") then return end
+        
+        local inputBox = Create("TextBox", {
+            Size = UDim2.new(1, S(10), 1, S(4)), 
+            Position = UDim2.new(0, -S(5), 0, -S(2)),
+            BackgroundColor3 = Color3.fromRGB(40, 40, 40), BackgroundTransparency = 0.1,
+            TextColor3 = Color3.new(1, 1, 1), TextSize = TS(11), Font = Enum.Font.GothamBold,
+            Text = tostring(currentVal), TextXAlignment = Enum.TextXAlignment.Right,
+            Parent = valBtn, ZIndex = 10, ClearTextOnFocus = false
+        })
+        AddCorner(inputBox, S(4))
+        inputBox:CaptureFocus()
+        
+        local function finishEdit()
+            if not inputBox or not inputBox.Parent then return end
+            local v = tonumber(inputBox.Text)
+            inputBox:Destroy()
+            
+            if v then
+                v = math.max(min, v) -- 最低不能小于 min
+                if v > max then max = v end -- ✅ 如果大于当前最大值，直接扩容 max
+                currentVal = v
+                -- 重新计算比例，确保滑条不乱
+                setRatio((currentVal - min) / (max - min), true)
+            else
+                -- 输入了非法字符，恢复原值
+                valBtn.Text = tostring(currentVal)
+            end
+        end
+        
+        inputBox.FocusLost:Connect(finishEdit)
+    end)
     
     track.InputBegan:Connect(function(inp)
         if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
@@ -629,7 +666,9 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
     end)
     
     RegisterSetting(text, "slider", function() return currentVal end, function(v)
-        v = math.clamp(tonumber(v) or default, min, max)
+        v = tonumber(v) or default
+        if v > max then max = v end -- ✅ 加载配置时，如果存的值大于 max，也自动扩容
+        v = math.clamp(v, min, max)
         setRatio((v - min) / (max - min), true)
     end, group)
 end
