@@ -7,6 +7,52 @@ BridgeProtocol = 2,
 IsRealYoUI = true,
 Initialized = false,
 }
+-- ✅ 新增：Tab 优先级协议
+local TabDefaultPriorities = { ["Info"] = 100, ["ESP"] = 80, ["FE"] = 60, ["ScriptHub"] = 10 }
+local CurrentTabPriorities = { 100, 80, 60, 10 } -- 对应 Index 1, 2, 3, 4
+
+-- ✅ 新增：偷梁换柱核心函数 (将高优先级 Tab 的内容移动到最低优先级 Tab)
+function Lib:DisplaceTab(highIndex, lowIndex)
+    if highIndex == lowIndex then return end
+    
+    -- 1. 移动 GUI 元素 (遍历 4 个子页面)
+    for subIdx = 1, 4 do
+        local srcScroll = self.GetScroll(highIndex, subIdx)
+        local dstScroll = self.GetScroll(lowIndex, subIdx)
+        if srcScroll and dstScroll then
+            for _, child in ipairs(srcScroll:GetChildren()) do
+                if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+                    child.Parent = dstScroll
+                end
+            end
+            self:ClearFlowCache(srcScroll)
+            self:ClearFlowCache(dstScroll)
+        end
+    end
+
+    -- 2. 更新名称和路由表 (把高优先级的名字给低优先级，因为内容移过去了)
+    local highName = self._mainNames[highIndex]
+    if self._sideButtons and self._sideButtons[lowIndex] then
+        self._sideButtons[lowIndex].Text = highName
+    end
+    self._mainNames[lowIndex] = highName -- 更新内部名称记录
+    
+    if self._subNameSets[highIndex] and self._subNameSets[lowIndex] then
+        for k, v in pairs(self._subNameSets[highIndex]) do
+            self._subNameSets[lowIndex][k] = v
+        end
+    end
+
+    -- 3. 交换优先级记录
+    local highPri = CurrentTabPriorities[highIndex]
+    CurrentTabPriorities[lowIndex] = highPri
+    -- highIndex 的优先级稍后由游戏脚本接管时重新设定
+    
+    -- 4. 刷新 UI (如果当前正好在 lowIndex 页面)
+    if self._refreshTopNames and self._getCurrentMain and self._getCurrentMain() == lowIndex then
+        self._refreshTopNames(lowIndex)
+    end
+end
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
@@ -1071,28 +1117,59 @@ return false
 end
 
 function Lib:RequestGameBridge(payload)
-payload = payload or {}
-if payload.Brand ~= self.Brand then return false, "brand_mismatch" end
-if payload.Protocol and payload.Protocol ~= self.BridgeProtocol then return false, "protocol_mismatch" end
-if not self.Initialized then return false, "ui_not_initialized" end
-local category = tostring(payload.Category or "Script Hu."):gsub("%s+", "")
-local sub = tostring(payload.Sub or "RealYoHub"):gsub("%s+", "")
-local m, j = FindPageIndices(category, sub)
-if not m or not j then return false, "page_not_found: " .. category .. "/" .. sub end
-local scroll = self.GetScroll(m, j)
-if not scroll then return false, "page_not_ready: " .. m .. "," .. j end
-if payload.Mode ~= "Append" then
-for _, c in ipairs(scroll:GetChildren()) do
-if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
-end
-self:ClearFlowCache(scroll)
-end
-local bridge = setmetatable({
-UI = self, Name = payload.Name or "GameScript", Active = true,
-Protocol = self.BridgeProtocol, Host = scroll, MainIndex = m, SubIndex = j,
-}, BridgeMeta)
-if payload.Focus then bridge:Focus() end
-return true, bridge
+    payload = payload or {}
+    if payload.Brand ~= self.Brand then return false, "brand_mismatch" end
+    if payload.Protocol and payload.Protocol ~= self.BridgeProtocol then return false, "protocol_mismatch" end
+    if not self.Initialized then return false, "ui_not_initialized" end
+    
+    local requestedCat = tostring(payload.RequestedCategory or payload.Category or "ScriptHub"):gsub("%s+", " ")
+    local sub = tostring(payload.Sub or "RealYoHub"):gsub("%s+", " ")
+    local m, j = FindPageIndices(requestedCat, sub)
+    if not m or not j then return false, "page_not_found: " .. requestedCat .. "/" .. sub end
+    
+    -- ✅ 弹性替换逻辑：优先级仲裁
+    local gamePriority = tonumber(payload.Priority) or 50 -- 游戏脚本默认优先级 50
+    local targetIndex = m
+    
+    -- 如果目标 Tab 当前优先级 >= 游戏脚本优先级 (说明游戏脚本想抢占高优先级位置)
+    if CurrentTabPriorities[targetIndex] >= gamePriority then
+        -- 寻找当前所有 Tab 中优先级最低的
+        local lowestIndex = 1
+        local lowestPri = CurrentTabPriorities[1]
+        for i = 2, 4 do
+            if CurrentTabPriorities[i] < lowestPri then
+                lowestPri = CurrentTabPriorities[i]
+                lowestIndex = i
+            end
+        end
+        
+        -- 如果最低优先级的不是目标位置，执行偷梁换柱
+        if lowestIndex ~= targetIndex then
+            self:DisplaceTab(targetIndex, lowestIndex)
+        end
+    end
+    
+    -- 更新目标位置的优先级为游戏脚本的优先级
+    CurrentTabPriorities[targetIndex] = gamePriority
+
+    -- 后续标准接管流程
+    local scroll = self.GetScroll(targetIndex, j)
+    if not scroll then return false, "page_not_ready: " .. targetIndex .. ", " .. j end
+    
+    if payload.Mode ~= "Append" then
+        for _, c in ipairs(scroll:GetChildren()) do
+            if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
+        end
+        self:ClearFlowCache(scroll)
+    end
+    
+    local bridge = setmetatable({
+        UI = self, Name = payload.Name or "GameScript", Active = true,
+        Protocol = self.BridgeProtocol, Host = scroll, MainIndex = targetIndex, SubIndex = j,
+    }, BridgeMeta)
+    
+    if payload.Focus then bridge:Focus() end
+    return true, bridge
 end
 
 local function PublishHost()
