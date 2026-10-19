@@ -67,10 +67,8 @@ if AUTO_ACCEPT and HostUI then
             Brand = GAME.Brand, 
             Protocol = HostUI.BridgeProtocol or 2, 
             Name = GAME.Name,
-            -- ✅ 修复3：严格匹配 UI库.lua 中的 mainNames ("ScriptHub" 无空格)
-            Category = "ScriptHub", 
-            -- ✅ 修复4：修正拼写错误，并保留 UI库 subNameSets 中定义的单尾部空格
-            Sub = "RealYoHub ", 
+            Category = "Info", 
+            Sub = "Annc ",
             Mode = "Replace", 
             Focus = false,
         })
@@ -86,12 +84,11 @@ if AUTO_ACCEPT and HostUI then
 end
 
 if Runtime.Mode == "Host" then
-    SafeCall("RenameMain4", function() HostUI:RenameMain(1, "RealYoHub") end)
-    SafeCall("RenameSub41", function() HostUI:RenameSub(1, 1, "Area 51") end)
-    SafeCall("RenameSub42", function() HostUI:RenameSub(1, 2, "Gun Modded") end)
-    SafeCall("RenameSub43", function() HostUI:RenameSub(1, 3, "Teleport") end)
-    SafeCall("RenameMain2", function() HostUI:RenameMain(2, "Universal Tools") end)
-    SafeCall("RenameSub22", function() HostUI:RenameSub(2, 2, "FE Tools") end)
+    SafeCall("RenameMain1", function() HostUI:RenameMain(1, "RealYoHub") end)
+    SafeCall("RenameSub11", function() HostUI:RenameSub(1, 1, "Area 51") end)
+    SafeCall("RenameSub12", function() HostUI:RenameSub(1, 2, "Gun Modded") end)
+    SafeCall("RenameSub13", function() HostUI:RenameSub(1, 3, "Teleport") end)
+    SafeCall("RenameSub14", function() HostUI:RenameSub(1, 4, "FE Tools") end)
 end
 
 local function Notify(title, content, duration, icon)
@@ -517,7 +514,7 @@ if Runtime.Mode == "Host" then
     SafeCall("Build Area51", function() bridge:UsePageIndex(1, 1, "Replace"); BuildArea51(BridgeAdapter(bridge)) end)
     SafeCall("Build GunModded", function() bridge:UsePageIndex(1, 2, "Replace"); BuildGunModded(BridgeAdapter(bridge)) end)
     SafeCall("Build Teleport", function() bridge:UsePageIndex(1, 3, "Replace"); BuildTeleport(BridgeAdapter(bridge)) end)
-    SafeCall("Build FETools", function() bridge:UsePageIndex(2, 2, "Replace"); BuildFETools(BridgeAdapter(bridge)) end)
+    SafeCall("Build FETools", function() bridge:UsePageIndex(1, 4, "Replace"); BuildFETools(BridgeAdapter(bridge)) end)
     SafeCall("Focus", function() bridge:Focus() end)
     Notify("RealYoHub", "Handshake OK - hosted by RealYoUI", 6, "crown")
 else
