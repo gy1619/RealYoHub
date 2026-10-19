@@ -1,7 +1,7 @@
 -- RealYoUI.lua (Astool.lua)
--- RealYoUI Standalone UI Library + GameBridge Takeover Protocol V4.3 (Fixed Syntax)
+-- RealYoUI Standalone UI Library + GameBridge Takeover Protocol V4.5 (Optimized HWID)
 local Lib = {
-    Version = "4.3.0",
+    Version = "4.5.0",
     Brand = "RealYoUI",
     BridgeProtocol = 2,
     IsRealYoUI = true,
@@ -10,20 +10,14 @@ local Lib = {
 -- ✅ 新增：Tab 优先级协议
 local TabDefaultPriorities = { ["Info"] = 100, ["ESP"] = 80, ["FE"] = 60, ["ScriptHub"] = 10 }
 local CurrentTabPriorities = { 100, 80, 60, 10 } -- 对应 Index 1, 2, 3, 4
--- ✅ 修复后的偷梁换柱函数 (正确交换名称和子菜单)
+-- ✅ 新增：偷梁换柱核心函数 (将高优先级 Tab 的内容移动到最低优先级 Tab)
 function Lib:DisplaceTab(highIndex, lowIndex)
     if highIndex == lowIndex then return end
-    
-    -- 1. 移动 GUI 元素 (把高优先级内容移到低优先级位置)
+    -- 1. 移动 GUI 元素 (遍历 4 个子页面)
     for subIdx = 1, 4 do
         local srcScroll = self.GetScroll(highIndex, subIdx)
         local dstScroll = self.GetScroll(lowIndex, subIdx)
         if srcScroll and dstScroll then
-            -- 先清空目标位置 (ScriptHub) 的旧内容
-            for _, child in ipairs(dstScroll:GetChildren()) do
-                if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then child:Destroy() end
-            end
-            -- 移动源位置 (Info) 的内容过去
             for _, child in ipairs(srcScroll:GetChildren()) do
                 if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
                     child.Parent = dstScroll
@@ -33,32 +27,24 @@ function Lib:DisplaceTab(highIndex, lowIndex)
             self:ClearFlowCache(dstScroll)
         end
     end
-
-    -- 2. ✅ 关键修复：交换主菜单名称 (Info <-> ScriptHub)
-    local tempName = self._mainNames[highIndex]
-    self._mainNames[highIndex] = self._mainNames[lowIndex]
-    self._mainNames[lowIndex] = tempName
-    
-    -- 更新侧边栏按钮显示
-    if self._sideButtons and self._sideButtons[highIndex] then self._sideButtons[highIndex].Text = self._mainNames[highIndex] end
-    if self._sideButtons and self._sideButtons[lowIndex] then self._sideButtons[lowIndex].Text = self._mainNames[lowIndex] end
-
-    -- 3. ✅ 关键修复：交换子菜单名称
-    if self._subNameSets and self._subNameSets[highIndex] and self._subNameSets[lowIndex] then
-        local tempSubs = self._subNameSets[highIndex]
-        self._subNameSets[highIndex] = self._subNameSets[lowIndex]
-        self._subNameSets[lowIndex] = tempSubs
+    -- 2. 更新名称和路由表 (把高优先级的名字给低优先级，因为内容移过去了)
+    local highName = self._mainNames[highIndex]
+    if self._sideButtons and self._sideButtons[lowIndex] then
+        self._sideButtons[lowIndex].Text = highName
     end
-
-    -- 4. 交换优先级记录
-    local tempPri = CurrentTabPriorities[highIndex]
-    CurrentTabPriorities[highIndex] = CurrentTabPriorities[lowIndex]
-    CurrentTabPriorities[lowIndex] = tempPri
-
-    -- 5. 刷新 UI
-    if self._refreshTopNames and self._getCurrentMain then
-        if self._getCurrentMain() == highIndex then self._refreshTopNames(highIndex) end
-        if self._getCurrentMain() == lowIndex then self._refreshTopNames(lowIndex) end
+    self._mainNames[lowIndex] = highName -- 更新内部名称记录
+    if self._subNameSets[highIndex] and self._subNameSets[lowIndex] then
+        for k, v in pairs(self._subNameSets[highIndex]) do
+            self._subNameSets[lowIndex][k] = v
+        end
+    end
+    -- 3. 交换优先级记录
+    local highPri = CurrentTabPriorities[highIndex]
+    CurrentTabPriorities[lowIndex] = highPri
+    -- highIndex 的优先级稍后由游戏脚本接管时重新设定
+    -- 4. 刷新 UI (如果当前正好在 lowIndex 页面)
+    if self._refreshTopNames and self._getCurrentMain and self._getCurrentMain() == lowIndex then
+        self._refreshTopNames(lowIndex)
     end
 end
 local Players = game:GetService("Players")
@@ -96,38 +82,83 @@ local COL = {
     PillGray = Color3.fromRGB(75, 75, 75), White = Color3.fromRGB(255, 255, 255),
 }
 Lib.COL = COL
-local AP = {
-    Panel = Color3.fromRGB(255, 255, 255), PanelT = 0.45, Comp = Color3.fromRGB(255, 255, 255), CompT = 0.35,
-    Text = Color3.fromRGB(70, 70, 70), Dim = Color3.fromRGB(110, 110, 110), Accent = Color3.fromRGB(215, 60, 60),
-    Stroke = Color3.fromRGB(160, 160, 160), BorderRainbow = true, Border = Color3.fromRGB(215, 60, 60),
-}
-Lib.AP = AP
-local ORIG = { Comp = Color3.fromRGB(255, 255, 255), Text = Color3.fromRGB(70, 70, 70), Dim = Color3.fromRGB(110, 110, 110), Accent = Color3.fromRGB(215, 60, 60) }
-local Themes = {
-    ["Classic"] = { Panel = Color3.fromRGB(255,255,255), PanelT = 0.45, Comp = Color3.fromRGB(255,255,255), CompT = 0.35, Text = Color3.fromRGB(70,70,70), Dim = Color3.fromRGB(110,110,110), Accent = Color3.fromRGB(215,60,60), Stroke = Color3.fromRGB(160,160,160), BorderRainbow = true, Border = Color3.fromRGB(215,60,60) },
-    ["DeepBlue"] = { Panel = Color3.fromRGB(16,24,45), PanelT = 0.1, Comp = Color3.fromRGB(45,70,120), CompT = 0.15, Text = Color3.fromRGB(215,230,255), Dim = Color3.fromRGB(130,160,200), Accent = Color3.fromRGB(70,150,255), Stroke = Color3.fromRGB(90,120,170), BorderRainbow = false, Border = Color3.fromRGB(70,150,255) },
-    ["Cyber"] = { Panel = Color3.fromRGB(12,12,18), PanelT = 0.1, Comp = Color3.fromRGB(30,40,45), CompT = 0.15, Text = Color3.fromRGB(200,255,240), Dim = Color3.fromRGB(110,160,150), Accent = Color3.fromRGB(0,255,200), Stroke = Color3.fromRGB(0,180,150), BorderRainbow = false, Border = Color3.fromRGB(0,255,200) },
-    ["Vampire"] = { Panel = Color3.fromRGB(28,12,18), PanelT = 0.1, Comp = Color3.fromRGB(60,25,35), CompT = 0.15, Text = Color3.fromRGB(255,225,230), Dim = Color3.fromRGB(190,120,130), Accent = Color3.fromRGB(230,45,70), Stroke = Color3.fromRGB(180,60,80), BorderRainbow = false, Border = Color3.fromRGB(230,45,70) },
-}
-local function GetHWID()
-    local cands = { "gethwid", "get_hwid", "GetHwid", "gethardwareid", "get_sha1" }
+
+-- ✅✅✅ 核心优化：HWID 生成逻辑重构 (解决 Delta 天卡重置问题) ✅✅✅
+local function GetRobloxClientId()
+    -- 优先级 1：获取 Roblox 客户端设备 ID (最稳定，与设备绑定，不受注入器 Session 影响)
+    local ok, service = pcall(game.GetService, game, "RbxAnalyticsService")
+    if ok and service then
+        local ok2, id = pcall(service.GetClientId, service)
+        if ok2 and id and type(id) == "string" and #id > 5 then
+            return id
+        end
+    end
+    return nil
+end
+
+local function GetInjectorHWID()
+    -- 优先级 2：尝试注入器 API (作为备选，但增加过滤防止临时 ID)
+    local cands = { "gethwid", "get_hwid", "GetHwid", "gethardwareid", "get_sha1", "get_machine_id", "get_android_id" }
     for _, fn in ipairs(cands) do
         local f = _G[fn]
         if type(f) == "function" then
             local ok, r = pcall(f)
-            if ok and r then return tostring(r) end
+            if ok and r and type(r) == "string" and #r > 5 then
+                -- 过滤掉明显的临时 Session ID
+                local lowerR = r:lower()
+                if not lowerR:find("session") and not lowerR:find("temp") and not lowerR:find("random") then
+                    return r
+                end
+            end
         end
     end
-    return "NOHWID"
+    return nil
 end
-local function HashStr(s)
-    local h = 5381
-    for i = 1, #s do h = (h * 33 + string.byte(s, i)) % 4294967296 end
-    return string.format("%08X", h)
+
+local function GetSystemFingerprint()
+    -- 优先级 3：系统硬件指纹 (降级方案)
+    local ok, sys = pcall(SystemInfo)
+    if ok and sys then
+        return (sys.GpuName or "nogpu") .. "|" .. (sys.OsPlatform or "nos") .. "|" .. (sys.CpuName or "nocpu")
+    end
+    return nil
 end
-Lib.HashStr = HashStr
-local DEVICE_ID = HashStr(LocalPlayer.UserId .. " " .. GetHWID()) .. HashStr("RealYo_SZE" .. LocalPlayer.UserId)
+
+local function GenerateUniqueHWID()
+    -- 生成原始设备标识符
+    local raw = GetRobloxClientId()
+    if raw then return "R_" .. raw end -- R_ 前缀表示 Roblox 原生 ID
+    
+    raw = GetInjectorHWID()
+    if raw then return "I_" .. raw end -- I_ 前缀表示注入器 ID
+    
+    raw = GetSystemFingerprint()
+    if raw then return "S_" .. raw end -- S_ 前缀表示系统指纹
+    
+    -- 最终降级：使用 UserId (如果以上都失败，至少保证唯一性，但换号会变)
+    return "U_" .. tostring(LocalPlayer.UserId)
+end
+
+local function AdvancedHash(str)
+    -- 增强型哈希算法 (FNV-1a + 混淆)，生成 16 位高强度唯一码
+    local h1 = 0x811c9dc5
+    local h2 = 0x9e3779b9
+    for i = 1, #str do
+        local byte = string.byte(str, i)
+        h1 = (h1 ~ byte) * 0x01000193 % 0x100000000 -- FNV-1a 乘法
+        h2 = (h2 + byte) * 0x9e3779b9 % 0x100000000 -- 加法哈希
+    end
+    -- 混合两个哈希值
+    local final = (h1 * 2654435761 + h2) % 0x100000000
+    return string.format("%08X%08X", h1, final)
+end
+
+-- 生成最终 DEVICE_ID (加盐防止彩虹表破解)
+local RAW_HWID = GenerateUniqueHWID()
+local DEVICE_ID = AdvancedHash(RAW_HWID .. "RealYo_SZE_SALT_V1")
 Lib.DEVICE_ID = DEVICE_ID
+-- ✅✅✅ HWID 优化结束 ✅✅✅
+
 local License = {
     Mode = "open", Status = "Free",
     Remain = "temporarily Keyless", BoundDevice = DEVICE_ID,
@@ -190,7 +221,7 @@ local function LoadConfig(name)
     if not ok2 or type(data) ~= "table" then Toast("config broke: " .. name) return end
     local count = 0
     for _, e in ipairs(SettingRegistry) do if data[e.name] ~= nil then e.set(data[e.name]); count = count + 1 end end
-    Toast(("config readed: %s (%d項)"):format(name, count))
+    Toast(("config readed: %s (%d项)"):format(name, count))
 end
 Lib.LoadConfig = LoadConfig
 local function DeleteConfig(name)
@@ -400,18 +431,25 @@ local function MakeSection(parent, text)
     })
     return l
 end
+local AP = {
+    Panel = Color3.fromRGB(255, 255, 255), PanelT = 0.45, Comp = Color3.fromRGB(255, 255, 255), CompT = 0.35,
+    Text = Color3.fromRGB(70, 70, 70), Dim = Color3.fromRGB(110, 110, 110), Accent = Color3.fromRGB(215, 60, 60),
+    Stroke = Color3.fromRGB(160, 160, 160), BorderRainbow = true, Border = Color3.fromRGB(215, 60, 60),
+}
+Lib.AP = AP
+local ORIG = { Comp = Color3.fromRGB(255, 255, 255), Text = Color3.fromRGB(70, 70, 70), Dim = Color3.fromRGB(110, 110, 110), Accent = Color3.fromRGB(215, 60, 60) }
+local Themes = {
+    ["Classic"] = { Panel = Color3.fromRGB(255,255,255), PanelT = 0.45, Comp = Color3.fromRGB(255,255,255), CompT = 0.35, Text = Color3.fromRGB(70,70,70), Dim = Color3.fromRGB(110,110,110), Accent = Color3.fromRGB(215,60,60), Stroke = Color3.fromRGB(160,160,160), BorderRainbow = true, Border = Color3.fromRGB(215,60,60) },
+    ["DeepBlue"] = { Panel = Color3.fromRGB(16,24,45), PanelT = 0.1, Comp = Color3.fromRGB(45,70,120), CompT = 0.15, Text = Color3.fromRGB(215,230,255), Dim = Color3.fromRGB(130,160,200), Accent = Color3.fromRGB(70,150,255), Stroke = Color3.fromRGB(90,120,170), BorderRainbow = false, Border = Color3.fromRGB(70,150,255) },
+    ["Cyber"] = { Panel = Color3.fromRGB(12,12,18), PanelT = 0.1, Comp = Color3.fromRGB(30,40,45), CompT = 0.15, Text = Color3.fromRGB(200,255,240), Dim = Color3.fromRGB(110,160,150), Accent = Color3.fromRGB(0,255,200), Stroke = Color3.fromRGB(0,180,150), BorderRainbow = false, Border = Color3.fromRGB(0,255,200) },
+    ["Vampire"] = { Panel = Color3.fromRGB(28,12,18), PanelT = 0.1, Comp = Color3.fromRGB(60,25,35), CompT = 0.15, Text = Color3.fromRGB(255,225,230), Dim = Color3.fromRGB(190,120,130), Accent = Color3.fromRGB(230,45,70), Stroke = Color3.fromRGB(180,60,80), BorderRainbow = false, Border = Color3.fromRGB(230,45,70) },
+}
 local function MakeButton(parent, text, cb)
     local host = AsFlow(parent).Add(math.max(S(40) + EstW(text, TS(12)), S(90)), S(28))
     local btn = Create("TextButton", {
-        Size = UDim2.new(1, 0, 1, 0),
-        BackgroundColor3 = AP.Comp,
-        BackgroundTransparency = AP.CompT,
-        Text = text,
-        TextColor3 = AP.Text,
-        Font = Enum.Font.GothamMedium,
-        TextSize = TS(12),
-        AutoButtonColor = false,
-        Parent = host,
+        Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = AP.Comp, BackgroundTransparency = AP.CompT,
+        Text = text, TextColor3 = AP.Text, Font = Enum.Font.GothamMedium,
+        TextSize = TS(12), AutoButtonColor = false, Parent = host,
     })
     AddCorner(btn, S(5))
     Create("UIStroke", { Thickness = 1, Color = AP.Stroke, Transparency = 0.4 }, btn)
@@ -421,16 +459,9 @@ end
 local function MakeTextBox(parent, placeholder, default)
     local host = AsFlow(parent).Add(S(200), S(28))
     local box = Create("TextBox", {
-        Size = UDim2.new(1, 0, 1, 0),
-        BackgroundColor3 = AP.Comp,
-        BackgroundTransparency = AP.CompT,
-        Text = default or "",
-        PlaceholderText = placeholder,
-        TextColor3 = AP.Text,
-        Font = Enum.Font.GothamMedium,
-        TextSize = TS(13),
-        ClearTextOnFocus = false,
-        Parent = host,
+        Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = AP.Comp, BackgroundTransparency = AP.CompT,
+        Text = default or "", PlaceholderText = placeholder, TextColor3 = AP.Text,
+        Font = Enum.Font.GothamMedium, TextSize = TS(13), ClearTextOnFocus = false, Parent = host,
     })
     AddCorner(box, S(5))
     Create("UIStroke", { Thickness = 1, Color = Color3.fromRGB(160, 160, 160), Transparency = 0.4 }, box)
@@ -441,7 +472,7 @@ local function MakeToggle(parent, text, default, cb, register)
     local host = AsFlow(parent).Add(S(36) + EstW(text) + S(10), S(28))
     local state = default and true or false
     local row = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Parent = host })
-    local offColor = Color3.fromRGB(120, 120, 120) 
+    local offColor = Color3.fromRGB(120, 120, 120)
     local box = Create("Frame", {
         Size = UDim2.fromOffset(S(18), S(18)), Position = UDim2.fromOffset(0, S(5)),
         BackgroundColor3 = state and AP.Accent or offColor, Parent = row,
@@ -502,7 +533,7 @@ local function MakeSlider(parent, text, min, max, default, cb)
         setRatio((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, fire)
     end
     setRatio((default - min) / (max - min), false)
-    track.InputBegan:Connect(function(inp) 
+    track.InputBegan:Connect(function(inp)
         if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
             dragging = true; updateFromX(inp.Position.X, true)
         end
@@ -561,9 +592,7 @@ local function MakeDropdown(parent, text, options, default, cb)
                 Font = Enum.Font.Gotham, AutoButtonColor = false, Parent = list,
             })
             SafeClick(ob, function()
-                cur = opt;
-                btn.Text = opt .. " v"
-                CloseDropdown()
+                cur = opt; btn.Text = opt .. " v"; CloseDropdown()
                 if cb then cb(opt) end
             end)
         end
@@ -947,10 +976,9 @@ function Lib:Initialize(opts)
     self.Initialized = true
     return self
 end
--- ✅ 修复后的查找函数 (强制去除所有空格进行比对)
 local function FindPageIndices(category, sub)
-    category = tostring(category):gsub("%s+", "") -- 去除所有空格
-    sub = tostring(sub):gsub("%s+", "")           -- 去除所有空格
+    category = tostring(category):gsub("%s+", " ")
+    sub = tostring(sub):gsub("%s+", " ")
     local mNames = Lib._mainNames or { "Info", "ESP", "FE", "ScriptHub" }
     local sSets = Lib._subNameSets or {
         { "Annc", "Other", "Config", "Theme" },
@@ -959,17 +987,15 @@ local function FindPageIndices(category, sub)
         { "RealYoHub", "Keyless Script", "Keys Script", "Admin" },
     }
     for m, mn in ipairs(mNames) do
-        if tostring(mn):gsub("%s+", "") == category then
+        if tostring(mn):gsub("%s+", " ") == category then
             for j, sn in ipairs(sSets[m] or {}) do
-                if tostring(sn):gsub("%s+", "") == sub then return m, j end
+                if tostring(sn):gsub("%s+", " ") == sub then return m, j end
             end
             return m, nil
         end
     end
     return nil, nil
 end
-
-
 local BridgeMeta = {}
 BridgeMeta.__index = BridgeMeta
 function BridgeMeta:UsePageIndex(m, j, mode)
@@ -1057,55 +1083,45 @@ function Lib:RenameSub(m, j, newName)
     end
     return false
 end
--- ✅ 修复后的握手函数 (增加防错保护)
 function Lib:RequestGameBridge(payload)
     payload = payload or {}
     if payload.Brand ~= self.Brand then return false, "brand_mismatch" end
     if payload.Protocol and payload.Protocol ~= self.BridgeProtocol then return false, "protocol_mismatch" end
     if not self.Initialized then return false, "ui_not_initialized" end
-    
-    local requestedCat = tostring(payload.RequestedCategory or payload.Category or "ScriptHub"):gsub("%s+", "")
-    local sub = tostring(payload.Sub or "RealYoHub"):gsub("%s+", "")
+    local requestedCat = tostring(payload.RequestedCategory or payload.Category or "ScriptHub"):gsub("%s+", " ")
+    local sub = tostring(payload.Sub or "RealYoHub"):gsub("%s+", " ")
     local m, j = FindPageIndices(requestedCat, sub)
-    
-    -- ✅ 修复：如果找不到页面，直接返回错误，防止后续 nil 报错
-    if not m or not j then 
-        return false, "page_not_found: " .. requestedCat .. "/" .. sub 
-    end
-
-    local gamePriority = tonumber(payload.Priority) or 50
+    if not m or not j then return false, "page_not_found: " .. requestedCat .. "/" .. sub end
+    -- ✅ 弹性替换逻辑：优先级仲裁
+    local gamePriority = tonumber(payload.Priority) or 50 -- 游戏脚本默认优先级 50
     local targetIndex = m
-    
-    -- 优先级仲裁 (增加 pcall 保护)
-    local ok, err = pcall(function()
-        if CurrentTabPriorities[targetIndex] >= gamePriority then
-            local lowestIndex = 1
-            local lowestPri = CurrentTabPriorities[1] or 0
-            for i = 2, 4 do
-                if (CurrentTabPriorities[i] or 0) < lowestPri then
-                    lowestPri = CurrentTabPriorities[i]
-                    lowestIndex = i
-                end
-            end
-            if lowestIndex ~= targetIndex then
-                self:DisplaceTab(targetIndex, lowestIndex)
+    -- 如果目标 Tab 当前优先级 >= 游戏脚本优先级 (说明游戏脚本想抢占高优先级位置)
+    if CurrentTabPriorities[targetIndex] >= gamePriority then
+        -- 寻找当前所有 Tab 中优先级最低的
+        local lowestIndex = 1
+        local lowestPri = CurrentTabPriorities[1]
+        for i = 2, 4 do
+            if CurrentTabPriorities[i] < lowestPri then
+                lowestPri = CurrentTabPriorities[i]
+                lowestIndex = i
             end
         end
-        CurrentTabPriorities[targetIndex] = gamePriority
-    end)
-    if not ok then warn("[UI Lib] Priority logic error: " .. tostring(err)) end
-
+        -- 如果最低优先级的不是目标位置，执行偷梁换柱
+        if lowestIndex ~= targetIndex then
+            self:DisplaceTab(targetIndex, lowestIndex)
+        end
+    end
+    -- 更新目标位置的优先级为游戏脚本的优先级
+    CurrentTabPriorities[targetIndex] = gamePriority
     -- 后续标准接管流程
     local scroll = self.GetScroll(targetIndex, j)
-    if not scroll then return false, "page_not_ready" end
-    
+    if not scroll then return false, "page_not_ready: " .. targetIndex .. ", " .. j end
     if payload.Mode ~= "Append" then
         for _, c in ipairs(scroll:GetChildren()) do
             if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
         end
         self:ClearFlowCache(scroll)
     end
-    
     local bridge = setmetatable({
         UI = self, Name = payload.Name or "GameScript", Active = true,
         Protocol = self.BridgeProtocol, Host = scroll, MainIndex = targetIndex, SubIndex = j,
