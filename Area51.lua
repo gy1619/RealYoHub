@@ -1,5 +1,5 @@
--- ✅✅✅ ULTIMATE FIXED v9.9 ✅✅✅ (如果看到这行，说明执行的是最新代码)
-print("✅✅✅ ULTIMATE FIXED v9.9 ✅✅✅")
+-- area51.lua | RealYoHub (RealYoUI GameBridge auto-handshake) | FIX-BUILD 1
+print(">>> [Area51] script loaded (FIX-BUILD 1) <<<")
 
 local GAME = { Name = "RealYoHub Area51", Brand = "RealYoUI" }
 local Players = game:GetService("Players")
@@ -7,6 +7,7 @@ local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
+
 _G.savedPosition = _G.savedPosition or nil
 local Runtime = { Mode = "Original", Bridge = nil, Host = nil }
 
@@ -30,21 +31,20 @@ local function FindHostUI(timeout)
     }
     local deadline = tick() + timeout
     local why = "Host not found"
-    
     while true do
         for _, src in ipairs(sources) do
             local ok, obj = pcall(src.get)
-            if ok and type(obj) == "table" then 
-                if obj.IsRealYoUI ~= true then 
+            if ok and type(obj) == "table" then
+                if obj.IsRealYoUI ~= true then
                     why = "Found " .. src.name .. " but IsRealYoUI=false"
-                elseif obj.Brand ~= GAME.Brand then 
+                elseif obj.Brand ~= GAME.Brand then
                     why = "Found " .. src.name .. " but Brand mismatch"
-                elseif type(obj.RequestGameBridge) ~= "function" then 
+                elseif type(obj.RequestGameBridge) ~= "function" then
                     why = "Found " .. src.name .. " but missing API"
-                elseif obj.Initialized ~= true then 
+                elseif obj.Initialized ~= true then
                     why = "Found " .. src.name .. " but not initialized"
-                else 
-                    return obj, src.name 
+                else
+                    return obj, src.name
                 end
             end
         end
@@ -68,6 +68,7 @@ if AUTO_ACCEPT and HostUI then
             Protocol = HostUI.BridgeProtocol or 2,
             Name = GAME.Name,
             RequestedCategory = "Info",
+            Priority = 90,
             Category = "Info",
             Sub = "Annc",
             Mode = "Replace",
@@ -114,6 +115,7 @@ local function BridgeAdapter(bridge)
     return A
 end
 
+-- ========== Gun Modded V2 ==========
 local function BuildGunModded(A)
     local bridge = A._b
     local scrollHost = bridge.Host
@@ -207,7 +209,7 @@ local function BuildGunModded(A)
         local sig = table.concat(list, "|")
         if sig ~= lastSig then
             lastSig = sig
-            if weaponDrop then
+            if weaponDrop and weaponDrop.SetOptions then
                 weaponDrop.SetOptions((#list > 0) and list or { "No weapons" })
             end
         end
@@ -239,12 +241,15 @@ local function BuildGunModded(A)
         (#list > 0) and list[1] or "No weapons",
         function(selected) renderProperties(selected) end)
     A:Section("Instructions")
+    A:Label("Select a weapon above to mod it.")
+    A:Label("Settings are saved per weapon in Config.")
 end
 
+-- ========== Area 51 ==========
 local function BuildArea51(A)
     local speedHackConnection = nil
     local farmConn = nil
-    
+
     A:Toggle("Speed Hack", false, function(v)
         pcall(function()
             local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
@@ -274,7 +279,7 @@ local function BuildArea51(A)
             end
         end)
     end)
-    
+
     A:Input("Fly Height", "0", function(Value)
         local height = tonumber(Value) or 0
         if height <= 0 then
@@ -320,7 +325,7 @@ local function BuildArea51(A)
         if LocalPlayer.Character then onCharacterAdded(LocalPlayer.Character) end
         LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
     end)
-    
+
     A:Toggle("Farm Money", false, function(v)
         if v then
             farmConn = RunService.Heartbeat:Connect(function()
@@ -335,7 +340,7 @@ local function BuildArea51(A)
             if farmConn then farmConn:Disconnect() farmConn = nil end
         end
     end)
-    
+
     local function AddWeaponButton(name, mid, final, special)
         A:Button("Instant Get " .. name, function()
             local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -346,7 +351,6 @@ local function BuildArea51(A)
                 local btn = Workspace:FindFirstChild("Incinerator") and Workspace.Incinerator:FindFirstChild("ChallengeButton7") and Workspace.Incinerator.ChallengeButton7:FindFirstChild("Button")
                 if btn then
                     local p = btn:FindFirstChildOfClass("ProximityPrompt")
-                    -- 终极修复：确保分号存在
                     if p then p.HoldDuration = 0; fireproximityprompt(p) end
                 end
                 task.wait(0.8)
@@ -356,15 +360,14 @@ local function BuildArea51(A)
                 if mid then root.CFrame = CFrame.new(mid) task.wait(3) end
             end
             root.CFrame = CFrame.new(final)
-            Notify("Success", "Obtained " .. name, 5, "package")
+            Notify("Success", "Obtained " .. name, 5)
         end)
     end
-    
     AddWeaponButton("Burning Sword", nil, Vector3.new(62.23, 1062.00, 1159.89), true)
     AddWeaponButton("Red Missile Launcher", Vector3.new(625.76, 1127.85, 749.51), Vector3.new(-353.435, 1070.29, 409.856))
     AddWeaponButton("Vulcan", Vector3.new(625.76, 1127.85, 749.51), Vector3.new(-600.846, 950.275, 154.955))
     AddWeaponButton("Ice Crossbow", Vector3.new(625.76, 1127.85, 749.51), Vector3.new(243.564, 687.29, 943.856))
-    
+
     A:Toggle("Auto Supply Crate", false, function(state)
         if not state then
             if _G.RealSupplyLoop then _G.RealSupplyLoop = false end
@@ -430,7 +433,7 @@ local function BuildArea51(A)
             end
         end)
     end)
-    
+
     A:Button("Supply Instant Pickup", function()
         task.spawn(function()
             while task.wait(2) do
@@ -441,15 +444,15 @@ local function BuildArea51(A)
                 end
             end
         end)
-        Notify("Supply", "Instant pickup enabled", 6, "package")
+        Notify("Supply", "Instant pickup enabled", 6)
     end)
-    
+
     local blacklistCoordinates = {
         Vector3.new(-816, 5181, 493),
         Vector3.new(-816, 5181, 630),
         Vector3.new(-816, 5181, 376),
     }
-    local function teleportToRandomSupply(supplyName) 
+    local function teleportToRandomSupply(supplyName)
         pcall(function()
             local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
             local hrp = character:FindFirstChild("HumanoidRootPart")
@@ -471,36 +474,48 @@ local function BuildArea51(A)
             hrp.CFrame = target.CFrame + Vector3.new(0, 3, 0)
         end)
     end
-    
     A:Button("TP to Random SupplyCrate", function() teleportToRandomSupply("SupplyCrate") end)
     A:Button("TP to Random SupplyBall", function() teleportToRandomSupply("SupplyBall") end)
+
     A:Button("Destroy All Damage Parts", function()
         for _, v in ipairs(Workspace:GetDescendants()) do
             if v.Name == "DamagePart" or v.Name == "Lava" or v.Name:find("Fire") then
                 v:Destroy()
             end
         end
-        Notify("Cleanup", "All damage parts removed", 5, "trash-2")
+        Notify("Cleanup", "All damage parts removed", 5)
     end)
 end
 
+-- ========== Teleport ==========
 local function BuildTeleport(A)
     local places = {
-        ["Crafting Room"] = Vector3.new(953.97, 1060, 713.44), ["Shop"] = Vector3.new(588.74, 1151, 665.43),
-        ["Portal"] = Vector3.new(-106.58, 982, 822.14), ["Reaper Room"] = Vector3.new(-190.57, 982.00, 275.41),
-        ["Incinerator"] = Vector3.new(-316.88, 1062, 1158.83), ["Mineshaft"] = Vector3.new(-470.29, 753.00, 871.53),
-        ["T.S.I.Z"] = Vector3.new(168.73, 674.00, 888.06), ["Main Hall"] = Vector3.new(395.33, 982.00, 750.03),
-        ["Factory"] = Vector3.new(-394.82, 1062.00, 865.68), ["Prison"] = Vector3.new(-458.12, 1062.00, 1065.26),
-        ["Sewers"] = Vector3.new(-497.02, 922.10, 79.18), ["Robot Zone"] = Vector3.new(-14.21, 883.00, 731.27),
-        ["Volcano"] = Vector3.new(-510.616, 992.000, 305.217), ["Jack Spawn"] = Vector3.new(-361.266, 864.100, -58.076),
+        ["Crafting Room"] = Vector3.new(953.97, 1060, 713.44),
+        ["Shop"] = Vector3.new(588.74, 1151, 665.43),
+        ["Portal"] = Vector3.new(-106.58, 982, 822.14),
+        ["Reaper Room"] = Vector3.new(-190.57, 982.00, 275.41),
+        ["Incinerator"] = Vector3.new(-316.88, 1062, 1158.83),
+        ["Mineshaft"] = Vector3.new(-470.29, 753.00, 871.53),
+        ["T.S.I.Z"] = Vector3.new(168.73, 674.00, 888.06),
+        ["Main Hall"] = Vector3.new(395.33, 982.00, 750.03),
+        ["Factory"] = Vector3.new(-394.82, 1062.00, 865.68),
+        ["Prison"] = Vector3.new(-458.12, 1062.00, 1065.26),
+        ["Sewers"] = Vector3.new(-497.02, 922.10, 79.18),
+        ["Robot Zone"] = Vector3.new(-14.21, 883.00, 731.27),
+        ["Volcano"] = Vector3.new(-510.616, 992.000, 305.217),
+        ["Jack Spawn"] = Vector3.new(-361.266, 864.100, -58.076),
     }
     for name, pos in pairs(places) do
         A:Button("TP → " .. name, function()
             local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if root then root.CFrame = CFrame.new(623.5, 1072, 749.75); task.wait(2); root.CFrame = CFrame.new(pos) end
+            if root then
+                root.CFrame = CFrame.new(623.5, 1072, 749.75)
+                task.wait(2)
+                root.CFrame = CFrame.new(pos)
+            end
         end)
     end
-    
+
     local nicknameHidden = false
     local originalName = ""
     A:Toggle("Hide Name → Fuck51DevLoL", false, function(v)
@@ -512,29 +527,52 @@ local function BuildTeleport(A)
             local nickname = eventGui:FindFirstChild("Nickname")
             if not nickname then return end
             if v and not nicknameHidden then
-                originalName = nickname.Text; nickname.Text = "Fuck51DevLoL"; nicknameHidden = true
-                Notify("Name Hidden", "Now showing: Fuck51DevLoL", 3, "user")
+                originalName = nickname.Text
+                nickname.Text = "Fuck51DevLoL"
+                nicknameHidden = true
+                Notify("Name Hidden", "Now showing: Fuck51DevLoL", 3)
             elseif not v and nicknameHidden then
-                nickname.Text = originalName; nicknameHidden = false
-                Notify("Name Restored", "Back to original name", 3, "user")
+                nickname.Text = originalName
+                nicknameHidden = false
+                Notify("Name Restored", "Back to original name", 3)
             end
         end)
     end)
 end
 
+-- ========== FE Tools ==========
 local function BuildFETools(A)
     local connections = {}
-    A:Button("Player Join Notification", function() loadstring(game:HttpGet("https://raw.githubusercontent.com/boyscp/scriscriptsc/main/bbn.lua"))() end)
-    A:Button("Noclip", function() loadstring(game:HttpGet("https://raw.githubusercontent.com/TtmScripter/OtherScript/main/Noclip"))() end)
-    A:Button("Fly", function() loadstring(game:HttpGet("https://pastebin.com/raw/brP8SAfJ"))() end)
+
+    local function RunRemote(url)
+        local ok, err = pcall(function()
+            local src = game:HttpGet(url)
+            local fn = loadstring(src)
+            if type(fn) == "function" then
+                fn()
+            else
+                warn("[RealYoHub] remote compile failed: " .. tostring(url))
+            end
+        end)
+        if not ok then warn("[RealYoHub] remote error: " .. tostring(err)) end
+    end
+
+    A:Button("Player Join Notification", function() RunRemote("https://raw.githubusercontent.com/boyscp/scriscriptsc/main/bbn.lua") end)
+    A:Button("Noclip", function() RunRemote("https://raw.githubusercontent.com/TtmScripter/OtherScript/main/Noclip") end)
+    A:Button("Fly", function() RunRemote("https://pastebin.com/raw/brP8SAfJ") end)
+
     A:Button("Save Position", function()
         local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if root then _G.savedPosition = root.Position; Notify("Position", "Saved!", 3, "save") end
+        if root then _G.savedPosition = root.Position; Notify("Position", "Saved!", 3) end
     end)
     A:Button("Copy Position", function()
         if _G.savedPosition then
-            setclipboard(string.format("Vector3.new(%.3f, %.3f, %.3f)", _G.savedPosition.X, _G.savedPosition.Y, _G.savedPosition.Z))
-            Notify("Position", "Copied!", 4, "copy")
+            if setclipboard then
+                setclipboard(string.format("Vector3.new(%.3f, %.3f, %.3f)", _G.savedPosition.X, _G.savedPosition.Y, _G.savedPosition.Z))
+                Notify("Position", "Copied!", 4)
+            else
+                Notify("Position", "Clipboard not supported", 4)
+            end
         end
     end)
     A:Button("TP to Saved Position", function()
@@ -543,27 +581,36 @@ local function BuildFETools(A)
             if root then root.CFrame = CFrame.new(_G.savedPosition) end
         end
     end)
+
     A:Button("ESP", function()
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr ~= LocalPlayer and plr.Character then
                 local hl = Instance.new("Highlight")
-                hl.FillColor = Color3.fromRGB(255, 0, 255); hl.OutlineColor = Color3.new(1, 1, 1)
-                hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; hl.Adornee = plr.Character; hl.Parent = plr.Character
+                hl.FillColor = Color3.fromRGB(255, 0, 255)
+                hl.OutlineColor = Color3.new(1, 1, 1)
+                hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                hl.Adornee = plr.Character
+                hl.Parent = plr.Character
             end
         end
     end)
-    A:Toggle("Night Vision", false, function(v) game.Lighting.Ambient = v and Color3.new(1, 1, 1) or Color3.new(0, 0, 0) end)
+
+    A:Toggle("Night Vision", false, function(v)
+        game.Lighting.Ambient = v and Color3.new(1, 1, 1) or Color3.new(0, 0, 0)
+    end)
+
     A:Toggle("Infinite Jump", false, function(v)
         if v then
             table.insert(connections, UserInputService.JumpRequest:Connect(function()
                 local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                if hum then hum:ChangeState("Jumping") end
+                if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
             end))
-        else 
+        else
             for _, c in ipairs(connections) do c:Disconnect() end
-            connections = {} 
+            connections = {}
         end
     end)
+
     A:Toggle("Auto Interact", false, function(v)
         if v then
             table.insert(connections, RunService.Heartbeat:Connect(function()
@@ -571,13 +618,14 @@ local function BuildFETools(A)
                     if obj:IsA("ProximityPrompt") then fireproximityprompt(obj) end
                 end
             end))
-        else 
+        else
             for _, c in ipairs(connections) do c:Disconnect() end
-            connections = {} 
+            connections = {}
         end
     end)
 end
 
+-- ========== 自检 + 构建 ==========
 local function DefCheck()
     local missing = {}
     local function chk(n, v)
@@ -605,7 +653,8 @@ if Runtime.Mode == "Host" and DefCheck() then
     SafeCall("Build Teleport", function() bridge:UsePageIndex(1, 3, "Replace"); BuildTeleport(BridgeAdapter(bridge)) end)
     SafeCall("Build FETools", function() bridge:UsePageIndex(1, 4, "Replace"); BuildFETools(BridgeAdapter(bridge)) end)
     SafeCall("Focus", function() bridge:Focus() end)
-    SafeCall("HandshakeToast", function() Notify("RealYoHub", "Handshake OK - hosted by RealYoUI", 6, "crown") end)
+    SafeCall("HandshakeToast", function() Notify("RealYoHub", "Handshake OK - hosted by RealYoUI", 6) end)
+    print(">>> [Area51] all builds dispatched <<<")
 else
     warn("[RealYoHub] not built. Mode=" .. tostring(Runtime.Mode) .. " (Host 未握手成功 或 DefCheck 失败)")
 end
