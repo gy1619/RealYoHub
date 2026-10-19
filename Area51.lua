@@ -1,4 +1,5 @@
 -- area51.lua | RealYoHub (RealYoUI GameBridge auto-handshake) | FIX-BUILD 1
+print(">>> [Area51] script loaded (FIX-BUILD 1) <<<")
 
 local GAME = { Name = "RealYoHub Area51", Brand = "RealYoUI" }
 local Players = game:GetService("Players")
@@ -188,13 +189,13 @@ local function BuildGunModded(A)
                 if key:match("ID$") or key:match("Id$") then
                     A:Label(key .. " = " .. tostring(value))
                 elseif value == math.floor(value) then
-                    local mx = (value <= 0) and 100 or math.clamp(value * 10, 10, 100000)
-                    A:Slider(key, 0, mx, value, function(v) setting[key] = v end, name)
+        -- 整数直接最大 500
+                    A:Slider(key, 0, 500, value, function(v) setting[key] = v end, name)
                 else
+        -- 小数按 x0.01 处理，最大 500 (即 5.00)
                     local v100 = math.floor(value * 100 + 0.5)
-                    local mx100 = math.clamp(v100 * 10, 100, 10000)
-                    A:Slider(key .. " (x0.01)", 0, mx100, v100, function(v) setting[key] = v / 100 end, name)
-                end
+                A:Slider(key .. " (x0.01)", 0, 500, v100, function(v) setting[key] = v / 100 end, name)
+            end
             else
                 A:Label(key .. " = " .. tostring(value))
             end
