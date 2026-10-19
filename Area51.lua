@@ -1,4 +1,6 @@
--- area51.lua | RealYoHub (RealYoUI GameBridge auto-handshake)
+-- ✅✅✅ ULTIMATE FIXED v9.9 ✅✅✅ (如果看到这行，说明执行的是最新代码)
+print("✅✅✅ ULTIMATE FIXED v9.9 ✅✅✅")
+
 local GAME = { Name = "RealYoHub Area51", Brand = "RealYoUI" }
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -96,7 +98,6 @@ local function Notify(title, content, duration, icon)
     end
 end
 
--- ✅ BridgeAdapter 支持 Config 分组 (Group)
 local function BridgeAdapter(bridge)
     local A = { _b = bridge }
     function A:Section(t) return self._b:Section(t) end
@@ -113,7 +114,6 @@ local function BridgeAdapter(bridge)
     return A
 end
 
--- ✅✅✅ 智能 Gun Modded V2 (实时监测 + 动态 Setting) ✅✅✅
 local function BuildGunModded(A)
     local bridge = A._b
     local scrollHost = bridge.Host
@@ -241,7 +241,6 @@ local function BuildGunModded(A)
     A:Section("Instructions")
 end
 
--- ✅✅✅ Area 51 功能 (完整) ✅✅✅
 local function BuildArea51(A)
     local speedHackConnection = nil
     local farmConn = nil
@@ -347,7 +346,7 @@ local function BuildArea51(A)
                 local btn = Workspace:FindFirstChild("Incinerator") and Workspace.Incinerator:FindFirstChild("ChallengeButton7") and Workspace.Incinerator.ChallengeButton7:FindFirstChild("Button")
                 if btn then
                     local p = btn:FindFirstChildOfClass("ProximityPrompt")
-                    -- ✅ 修复了这里缺少分号导致的语法崩溃
+                    -- 终极修复：确保分号存在
                     if p then p.HoldDuration = 0; fireproximityprompt(p) end
                 end
                 task.wait(0.8)
@@ -485,7 +484,6 @@ local function BuildArea51(A)
     end)
 end
 
--- ✅✅✅ Teleport 功能 (完整) ✅✅✅
 local function BuildTeleport(A)
     local places = {
         ["Crafting Room"] = Vector3.new(953.97, 1060, 713.44), ["Shop"] = Vector3.new(588.74, 1151, 665.43),
@@ -524,7 +522,6 @@ local function BuildTeleport(A)
     end)
 end
 
--- ✅✅✅ FE Tools 功能 (完整) ✅✅✅
 local function BuildFETools(A)
     local connections = {}
     A:Button("Player Join Notification", function() loadstring(game:HttpGet("https://raw.githubusercontent.com/boyscp/scriscriptsc/main/bbn.lua"))() end)
@@ -581,7 +578,6 @@ local function BuildFETools(A)
     end)
 end
 
--- ✅ 定义完整性自检 (防粘贴截断/错位导致的 nil 调用)
 local function DefCheck()
     local missing = {}
     local function chk(n, v)
@@ -597,13 +593,11 @@ local function DefCheck()
     chk("BuildFETools", BuildFETools)
     if #missing > 0 then
         warn("[RealYoHub][FATAL] missing definitions: " .. table.concat(missing, ", "))
-        warn("[RealYoHub][FATAL] Area51.lua 上传截断或粘贴错位，请用 GitHub 的 Upload file / Replace 整文件重传，不要手机剪贴板分段粘")
         return false
     end
     return true
 end
 
--- ✅ 执行构建
 if Runtime.Mode == "Host" and DefCheck() then
     local bridge = Runtime.Bridge
     SafeCall("Build Area51", function() bridge:UsePageIndex(1, 1, "Replace"); BuildArea51(BridgeAdapter(bridge)) end)
@@ -613,5 +607,5 @@ if Runtime.Mode == "Host" and DefCheck() then
     SafeCall("Focus", function() bridge:Focus() end)
     SafeCall("HandshakeToast", function() Notify("RealYoHub", "Handshake OK - hosted by RealYoUI", 6, "crown") end)
 else
-    warn("[RealYoHub] not built. Mode=" .. tostring(Runtime.Mode) .. " (Host 未握手成功 或 DefCheck 失败，见上方 [FATAL])")
+    warn("[RealYoHub] not built. Mode=" .. tostring(Runtime.Mode) .. " (Host 未握手成功 或 DefCheck 失败)")
 end
