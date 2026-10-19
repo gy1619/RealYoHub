@@ -159,50 +159,98 @@ local function BuildGunModded(A)
     end
 
     local function renderProperties(name)
-        local setting = weaponData[name]
-        if not setting then Notify("GunMod", "cannot read " .. name .. " Setting", 3) return end
-        clearDyn()
-        dynGroup = name
-        dynFrame = Instance.new("Frame")
-        dynFrame.Name = "DynProps"
-        dynFrame.BackgroundTransparency = 1
-        dynFrame.Size = UDim2.new(1, 0, 0, 0)
-        dynFrame.AutomaticSize = Enum.AutomaticSize.Y
-        dynFrame.Parent = scrollHost
-        local lay = Instance.new("UIListLayout")
-        lay.Padding = UDim.new(0, 2)
-        lay.Parent = dynFrame
+    local setting = weaponData[name]
+    if not setting then Notify("GunMod", "cannot read " .. name .. " Setting", 3) return end
+    clearDyn()
+    dynGroup = name
+    dynFrame = Instance.new("Frame")
+    dynFrame.Name = "DynProps"
+    dynFrame.BackgroundTransparency = 1
+    dynFrame.Size = UDim2.new(1, 0, 0, 0)
+    dynFrame.AutomaticSize = Enum.AutomaticSize.Y
+    dynFrame.Parent = scrollHost
+    local lay = Instance.new("UIListLayout")
+    lay.Padding = UDim.new(0, 2)
+    lay.Parent = dynFrame
 
-        local oldHost = bridge.Host
-        bridge.Host = dynFrame
+    local oldHost = bridge.Host
+    bridge.Host = dynFrame
 
-        A:Section("Properties for " .. name)
-        local keys = {}
-        for k in pairs(setting) do table.insert(keys, k) end
-        table.sort(keys)
-        for _, key in ipairs(keys) do
-            local value = setting[key]
-            local t = type(value)
-            if t == "boolean" then
-                A:Toggle(key, value, function(v) setting[key] = v end, name)
-            elseif t == "number" then
-                if key:match("ID$") or key:match("Id$") then
-                    A:Label(key .. " = " .. tostring(value))
-                elseif value == math.floor(value) then
-        -- 整数直接最大 500
-                    A:Slider(key, 0, 500, value, function(v) setting[key] = v end, name)
-                else
-        -- 小数按 x0.01 处理，最大 500 (即 5.00)
-                    local v100 = math.floor(value * 100 + 0.5)
-                A:Slider(key .. " (x0.01)", 0, 500, v100, function(v) setting[key] = v / 100 end, name)
-            end
-            else
-                A:Label(key .. " = " .. tostring(value))
-            end
+    A:Section("Properties for " .. name)
+
+    -- 1. 定义核心功能关键词 (涵盖伤害、射速、弹药、模式)
+    local CORE_PROPS = {
+        BaseDamage = true, FireRate = true, BulletPerShot = true, 
+        MaxClip = true, AmmoPerClip = true, Clips = true, ReloadTime = true,
+        Piercing = true, Lifesteal = true, HeadshotDamageMultiplier = true,
+        Auto = true, ExplosiveEnabled = true, SniperEnabled = true, 
+        ShotgunEnabled = true, BurstFireEnabled = true, MinigunEnabled = true,
+        ChargedShotEnabled = true, DualEnabled = true, FlamingBullet = true,
+        Knockback = true, Spread = true, BulletSpeed = true
+    }
+
+    -- 2. 定义拉黑名单 (绝对不显示的纯视觉/动画垃圾)
+    local BLACKLIST = {
+        HitSoundIDs = true, BulletColor = true, BulletMaterial = true, 
+        BulletSize = true, MuzzleOffset = true, MouseIconID = true,
+        IdleAnimationID = true, FireAnimationID = true, ReloadAnimationID = true,
+        ShotgunClipinAnimationID = true, CameraShakingEnabled = true,
+        VisualizerEnabled = true, Intensity = true, FieldOfView = true,
+        BulletTransparency = true, FadeTime = true, MouseSensitive = true,
+        SpreadRedution = true, IdleAnimationSpeed = true, FireAnimationSpeed = true,
+        ReloadAnimationSpeed = true, ShellClipinSpeed = true, ShotgunClipinAnimationSpeed = true,
+        LimitedClipEnabled = true, DelayBeforeFiring = true, DelayAfterFiring = true, ChargingTime = true
+    }
+
+    local keys = {}
+    for k, v in pairs(setting) do 
+        -- 不是黑名单 且 不是自定义的隐藏属性
+        if not BLACKLIST[k] and not k:find("Animation") and not k:find("Sound") then
+            table.insert(keys, k) 
         end
-        bridge.Host = oldHost
-        Notify("GunMod", "loaded " .. name .. " setting (" .. #keys .. " item)", 3)
     end
+    -- 排序：核心属性排前面，特殊属性排后面
+    table.sort(keys, function(a, b)
+        local aCore, bCore = CORE_PROPS[a], CORE_PROPS[b]
+        if aCore and not bCore then return true end
+        if not aCore and bCore then return false end
+        return a < b
+    end)
+
+    for _, key in ipairs(keys) do
+        local value = setting[key]
+        local t = type(value)
+        local isCore = CORE_PROPS[key]
+        
+        -- 如果是核心功能，加个小标记，或者普通功能就放后面
+        local displayName = (isCore and "★ " or "  ") .. key
+
+        -- 处理 Desert Eagle 那种 table 类型（无限弹夹）
+        if t == "table" and type(value) == "table" then
+            if value.v == "inf" then
+                A:Label(displayName .. " = 无限 (Infinity)")
+            else
+                A:Label(displayName .. " = [Table]")
+            end
+        elseif t == "boolean" then
+            A:Toggle(displayName, value, function(v) setting[key] = v end, name)
+        elseif t == "number" then
+            if key:match("ID$") or key:match("Id$") then
+                A:Label(displayName .. " = " .. tostring(value))
+            elseif value == math.floor(value) then
+                A:Slider(displayName, 0, 500, value, function(v) setting[key] = v end, name)
+            else
+                local v100 = math.floor(value * 100 + 0.5)
+                A:Slider(displayName .. " (x0.01)", 0, 500, v100, function(v) setting[key] = v / 100 end, name)
+            end
+        elseif t == "string" then
+            A:Label(displayName .. " = " .. tostring(value))
+        end
+    end
+    
+    bridge.Host = oldHost
+    Notify("GunMod", "Loaded " .. name .. " (" .. #keys .. " core items)", 3)
+end
 
     local function rescan()
         local list = scanWeapons()
