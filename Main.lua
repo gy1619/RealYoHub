@@ -471,10 +471,45 @@ MakeButton(util, "Copy current location", function() local root = GetRoot(); if 
 MakeButton(util, "Rejoin", function() pcall(function() TeleportService:Teleport(game.PlaceId) end) end)
 
 -- ✅ RealYoHub / ScriptHub 页面 (Index 4) - 包含所有其他脚本按钮
-local script1 = ScrollOf(pages[4][1])
+local function RunRemoteLua(url, tag)
+    local ok, err = pcall(function()
+        local src = HttpGetText(url)
+        local fn, cerr = loadstring(src)
+        if type(fn) ~= "function" then
+            local fixed = RepairSource(src)
+            local fn2, cerr2 = loadstring(fixed)
+            if type(fn2) ~= "function" then
+                warn(("[RealYoUI] %s COMPILE FAILED"):format(tag))
+                warn("raw     : " .. tostring(cerr))
+                warn("repaired: " .. tostring(cerr2))
+                error("compile failed")
+            end
+            fn, src = fn2, fixed
+            warn(("[RealYoUI] %s source auto-repaired"):format(tag))
+        end
+        local ok2, rerr = pcall(fn)
+        if not ok2 then
+            local line = tonumber(tostring(rerr):match(":(%d+):"))
+            warn(("[RealYoUI] %s RUNTIME ERROR: %s"):format(tag, tostring(rerr)))
+            if line then
+                local lines = {}
+                for l in (src .. "\n"):gmatch("([^\n]*)\n") do lines[#lines+1] = l end
+                warn(("----- %s source around line %d -----"):format(tag, line))
+                for i = math.max(1, line - 5), math.min(#lines, line + 3) do
+                    warn(("%4d| %s"):format(i, lines[i] or ""))
+                end
+                warn("------------------------------------------")
+            end
+            pcall(function() if setclipboard then setclipboard(src) end end)
+            warn(("[RealYoUI] %s full source -> clipboard"):format(tag))
+            error(tostring(rerr))
+        end
+    end)
+    return ok, err
+end
+
 MakeButton(script1, "Survive in area 51!", function()
-    local url = "https://raw.githubusercontent.com/gy1619/RealYoHub/refs/heads/main/Area51.lua?t=" .. os.time()
-    local ok, err = pcall(function() loadstring(game:HttpGet(url))() end)
+    local ok, err = RunRemoteLua("https://raw.githubusercontent.com/gy1619/RealYoHub/refs/heads/main/Area51.lua?t=" .. os.time(), "Area51")
     Toast(ok and "Executed" or ("Fail: " .. tostring(err):sub(1, 60)))
 end)
 MakeButton(script1, "BrookHaven RP", function() local ry = pcall(function() loadstring(game:HttpGet("https://gist.githubusercontent.com/gy1619/29ee3701d50f59ee4061c5a96d7a79c5/raw/bf871ba30f57e8929a4d847841114f31d9f73894/bhhrp.lua"))() end); Toast(ry and "Executed" or "Fail") end)
