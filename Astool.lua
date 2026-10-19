@@ -18,13 +18,20 @@ function Lib:DisplaceTab(highIndex, lowIndex)
         local srcScroll = self.GetScroll(highIndex, subIdx)
         local dstScroll = self.GetScroll(lowIndex, subIdx)
         if srcScroll and dstScroll then
+            -- ✅ 先清空目标页原有组件，避免换页后新旧混叠
+            for _, child in ipairs(dstScroll:GetChildren()) do
+                if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+                    child:Destroy()
+                end
+            end
+            self:ClearFlowCache(dstScroll)
+            -- 再把源页内容整体搬过去
             for _, child in ipairs(srcScroll:GetChildren()) do
                 if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
                     child.Parent = dstScroll
                 end
             end
             self:ClearFlowCache(srcScroll)
-            self:ClearFlowCache(dstScroll)
         end
     end
     local highName = self._mainNames[highIndex]
@@ -155,6 +162,13 @@ local function RegisterSetting(name, kind, get, set, group)
     table.insert(SettingRegistry, { name = name, kind = kind, get = get, set = set, group = group })
 end
 Lib.RegisterSetting = RegisterSetting
+function Lib:PurgeSettings(group)
+    for i = #SettingRegistry, 1, -1 do
+        if SettingRegistry[i].group == group then
+            table.remove(SettingRegistry, i)
+        end
+    end
+end
 
 local CFG_DIR = "RealYo_Configs"
 local AUTO_FILE = CFG_DIR .. "/autoload.json"
@@ -245,7 +259,10 @@ local function LoadConfig(name)
         else
             val = data[e.name]
         end
-        if val ~= nil then e.set(val); count = count + 1 end
+        if val ~= nil then
+            local okSet = pcall(e.set, val)
+            if okSet then count = count + 1 end
+        end
     end
     Toast(("config readed: %s (%d items)"):format(name, count))
 end
