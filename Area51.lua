@@ -310,25 +310,41 @@ local function BuildGunModded(A)
         return list
     end
 
-    -- ✅ 後台強制鎖定當前武器面板的配置，防服務器偷改
-    task.spawn(function()
-        while task.wait(1) do
-            if dynGroup and weaponData[dynGroup] then
-                local setting = weaponData[dynGroup]
-                local wSettings = GetWeaponSettings()[dynGroup]
-                if type(wSettings) == "table" then
-                    for k, v in pairs(wSettings) do
-                        if setting[k] ~= nil and setting[k] ~= v then
-                            local t = type(setting[k])
-                            if t == "number" or t == "boolean" or t == "string" then
-                                setting[k] = v
-                            end
-                        end
+    -- ✅ 全局強制持久化：無視 UI 是否打開，只要是背包或手上的武器，每 0.5 秒強制同步一次
+task.spawn(function()
+    while task.wait(0.5) do
+        local wSettings = GetWeaponSettings()
+        local function checkAndSync(tool)
+            if not tool or not tool:IsA("Tool") then return end
+            local cfg = tool:FindFirstChild("Setting")
+            if not cfg then return end
+            local saved = wSettings[tool.Name]
+            if type(saved) ~= "table" then return end
+            
+            local ok, setting = pcall(require, cfg)
+            if not ok or type(setting) ~= "table" then return end
+            
+            for k, v in pairs(saved) do
+                if setting[k] ~= nil and setting[k] ~= v then
+                    local t = type(setting[k])
+                    if t == "number" or t == "boolean" or t == "string" then
+                        -- 直接把保存的值塞回武器模块，瞬間覆蓋
+                        setting[k] = v
                     end
                 end
             end
         end
-    end)
+        
+        pcall(function()
+            if LocalPlayer.Backpack then
+                for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do checkAndSync(tool) end
+            end
+            if LocalPlayer.Character then
+                for _, tool in ipairs(LocalPlayer.Character:GetChildren()) do checkAndSync(tool) end
+            end
+        end)
+    end
+end)
 
     local function clearDyn()
         if dynFrame then pcall(function() dynFrame:Destroy() end) dynFrame = nil end
@@ -764,70 +780,78 @@ local function BuildArea51(A)
     AddWeaponButton("Ice Crossbow", Vector3.new(625.76, 1127.85, 749.51), Vector3.new(243.564, 687.29, 943.856))
 
     A:Toggle("Auto Supply Crate", false, function(state)
-        if not state then
-            if _G.RealSupplyLoop then _G.RealSupplyLoop = false end
-            return
-        end
-        local player = LocalPlayer
-        local character = player.Character or player.CharacterAdded:Wait()
-        local hrp = character:WaitForChild("HumanoidRootPart")
-        local lastMovingPos = hrp.CFrame
-        local safePoint = CFrame.new(625.76, 1127.85, 749.51)
-        _G.RealSupplyLoop = true
-        task.spawn(function()
-            while _G.RealSupplyLoop do
-                task.wait(0.0001)
-                pcall(function()
-                    local hum = player.Character and player.Character:FindFirstChild("Humanoid")
-                    if hum and hum.MoveDirection.Magnitude > 0 then
-                        lastMovingPos = player.Character.HumanoidRootPart.CFrame
+    if not state then
+        if _G.RealSupplyLoop then _G.RealSupplyLoop = false end
+        return
+    end
+    
+    local player = LocalPlayer
+    -- 中轉安全點（用來過檢查點）
+    local safePoint = CFrame.new(625.76, 1127.85, 749.51) 
+    _G.RealSupplyLoop = true
+    
+    task.spawn(function()
+        while _G.RealSupplyLoop do
+            task.wait(1.2)
+            pcall(function()
+                local char = player.Character or player.CharacterAdded:Wait()
+                local root = char:FindFirstChild("HumanoidRootPart")
+                local hum = char:FindFirstChild("Humanoid")
+                if not root or not hum or hum.Health <= 0 then return end
+                
+                local supplies = {}
+                for _, obj in ipairs(Workspace:GetChildren()) do
+                    if obj.Name == "SupplyCrate" or obj.Name == "Ball" then
+                        table.insert(supplies, obj)
                     end
-                end)
-            end
-        end)
-        task.spawn(function()
-            while _G.RealSupplyLoop do
-                task.wait(1.3)
-                pcall(function()
-                    local char = player.Character or player.CharacterAdded:Wait()
-                    local root = char:FindFirstChild("HumanoidRootPart")
-                    if not root then return end
-                    local hasPickedThisWave = false
-                    repeat
-                        local supplies = {}
-                        for _, obj in ipairs(Workspace:GetChildren()) do
-                            if obj.Name == "SupplyCrate" or obj.Name == "Ball" then
-                                table.insert(supplies, obj)
-                            end
-                        end
-                        if #supplies == 0 then break end
-                        local target = nil
-                        for _, supply in ipairs(supplies) do
-                            if (supply.Position - Vector3.new(-816, 5181, 493)).Magnitude > 5
-                            and (supply.Position - Vector3.new(-816, 5181, 630)).Magnitude > 5
-                            and (supply.Position - Vector3.new(-816, 5181, 376)).Magnitude > 5 then
-                                target = supply
-                                break
-                            end
-                        end
-                        if not target then break end
-                        hasPickedThisWave = true
+                end
+                if #supplies == 0 then return end
+                
+                for _, supply in ipairs(supplies) do
+                    -- 跳過黑名單座標
+                    if (supply.Position - Vector3.new(-816, 5181, 493)).Magnitude > 5
+                    and (supply.Position - Vector3.new(-816, 5181, 630)).Magnitude > 5
+                    and (supply.Position - Vector3.new(-816, 5181, 376)).Magnitude > 5 then
+                        
+                        -- 🛑 第一步：先回中轉安全點，停留 1.5 秒過檢查點
                         root.CFrame = safePoint
-                        task.wait(1.5)
-                        root.CFrame = target.CFrame + Vector3.new(0, 3, 0)
-                        task.wait(0.3)
-                        local p = target:FindFirstChildOfClass("ProximityPrompt")
-                        if p then
-                            p.HoldDuration = 0
-                            fireproximityprompt(p)
+                        task.wait(1.5) 
+                        
+                        -- 🚀 第二步：計算箱子正下方的位置（往下沉 10 個 Studs）
+                        local targetPos = supply.Position + Vector3.new(0, -10, 0)
+                        
+                        -- 🛡️ 第三步：開啟穿牆，瞬移到地下
+                        for _, p in ipairs(char:GetDescendants()) do
+                            if p:IsA("BasePart") then p.CanCollide = false end
                         end
-                        task.wait(0.4)
-                    until false
-                    if hasPickedThisWave then root.CFrame = lastMovingPos end
-                end)
-            end
-        end)
+                        root.CFrame = CFrame.new(targetPos)
+                        task.wait(0.05) 
+                        
+                        -- ⚡ 第四步：距離改大並觸發 Prompt
+                        for _, desc in ipairs(supply:GetDescendants()) do
+                            if desc:IsA("ProximityPrompt") then
+                                desc.MaxActivationDistance = 100
+                                desc.HoldDuration = 0
+                                fireproximityprompt(desc)
+                            end
+                        end
+                        
+                        -- 🚀 第五步：拿完瞬間拉回安全點
+                        task.wait(0.05)
+                        root.CFrame = safePoint
+                        
+                        -- 恢復碰撞
+                        for _, p in ipairs(char:GetDescendants()) do
+                            if p:IsA("BasePart") then p.CanCollide = true end
+                        end
+                        
+                        task.wait(0.3)
+                    end
+                end
+            end)
+        end
     end)
+end)
 
     A:Button("Supply Instant Pickup", function()
         task.spawn(function()
