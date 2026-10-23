@@ -587,7 +587,6 @@ UserInputService.InputBegan:Connect(function(inp)
     end
 end)
 
--- ✅ 修复：给 Dropdown 加入配置注册和保存
 local function MakeDropdown(parent, text, options, default, cb, group)
     local row = AsFlow(parent).Add(S(150) + EstW(text, TS(12)) + S(16), S(30))
     local btn = Create("TextButton", {
@@ -613,7 +612,7 @@ local function MakeDropdown(parent, text, options, default, cb, group)
     local handle = {}; local cur = default
     local function setValue(v, fire)
         cur = v
-        btn.Text = v .. " v"
+        btn.Text = tostring(v) .. " v" -- 確保無論傳什麼進來都能正常顯示
         if cb then cb(v) end
         if fire then TriggerAutoSave() end
     end
@@ -636,6 +635,7 @@ local function MakeDropdown(parent, text, options, default, cb, group)
     buildOptions(options)
     handle.Row = row
     function handle.SetOptions(opts) buildOptions(opts) end
+    function handle.Set(v) setValue(v, false) end -- ✅ 暴露外部強刷介面
     SafeClick(btn, function()
         if openDropdown == list then CloseDropdown() return end
         CloseDropdown()
@@ -643,7 +643,6 @@ local function MakeDropdown(parent, text, options, default, cb, group)
         list.Visible = true; openDropdown = list
     end)
     
-    -- ✅ 注册配置记录
     RegisterSetting(text, "dropdown", function() return cur end, function(v) setValue(v, false) end, group, default)
     return handle
 end
@@ -1071,24 +1070,23 @@ function Lib:Initialize(opts)
     end
     
     local targetCFG = CFG_DIR or "RealYo_Configs"
-    if type(isfile) == "function" and isfile(targetCFG .. "/autosave.json") then
-        local ok, raw = pcall(readfile, targetCFG .. "/autosave.json")
-        if ok and raw then
-            local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
-            if ok2 and type(data) == "table" then
-                AutoSaveData = data
-                for _, e in ipairs(SettingRegistry) do
-                    local val = nil
-                    if e.group and type(data[e.group]) == "table" then
-                        val = data[e.group][e.name]
-                    else
-                        val = data[e.name]
+        -- ✅ 延遲強制重載，確保大退後所有組件都能吃到保存的值
+    task.delay(0.5, function()
+        if type(isfile) == "function" and isfile(targetCFG .. "/autosave.json") then
+            local ok, raw = pcall(readfile, targetCFG .. "/autosave.json")
+            if ok and raw then
+                local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
+                if ok2 and type(data) == "table" then
+                    AutoSaveData = data
+                    for _, e in ipairs(SettingRegistry) do
+                        local val = (e.group and data[e.group] and data[e.group][e.name]) or data[e.name]
+                        if val ~= nil then pcall(e.set, val) end
                     end
-                    if val ~= nil then pcall(e.set, val) end
                 end
             end
         end
-    end
+    end)
+
     self.Initialized = true
     return self
 end
