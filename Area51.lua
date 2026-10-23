@@ -810,7 +810,7 @@ local function BuildArea51(A)
                     
                     local supplies = {}
                     for _, obj in ipairs(Workspace:GetChildren()) do
-                        if obj.Name == "SupplyCrate" or obj.Name == "Ball" then
+                        if obj.Name == "SupplyCrate" or obj.Name:find("Ball") then
                             table.insert(supplies, obj)
                         end
                     end
