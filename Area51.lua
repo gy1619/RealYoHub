@@ -144,6 +144,7 @@ local function BuildGunModded(A)
     end)
 
     -- 防幽靈
+    -- ✅ 防幽靈自救 (加入 Toast 提示)
     task.spawn(function()
         while task.wait(1) do
             local char = LocalPlayer.Character
@@ -160,6 +161,8 @@ local function BuildGunModded(A)
                             task.wait(0.05)
                             hum:ChangeState(Enum.HumanoidStateType.Running)
                         end
+                        -- ✅ 觸發自救時彈出提示
+                        Notify("Anti-Ghost", "Forcing Network Sync...", 2)
                     end)
                 end
             end
@@ -356,76 +359,62 @@ local function BuildGunModded(A)
         bridge.Host = dynFrame
 
         A:Section("Templates & Backups")
-        
+
         local tplName = ""
-        A:Input("Template Name", "New Template Name...", function(v) tplName = v end)
+        A:Input("Template Name", "Enter Name...", function(v) tplName = v end)
         
-        A:Button("Save as New Template", function()
-            local n = tplName
-            if n == "" then n = "Default" end
-            n = n:gsub("^%s+", ""):gsub("%s+$", "")
+        A:Button("Save / Overwrite Template", function()
+            local n = tplName:gsub("^%s+", ""):gsub("%s+$", "")
+            if n == "" then Notify("GunMod", "Name required!", 3) return end
             if SaveTemplate(n, setting) then
-                Notify("GunMod", "Saved New Template: " .. n, 3)
+                Notify("GunMod", "Saved: " .. n, 3)
                 SelectedTemplate = n
-                renderProperties(name) -- 刷新 UI
+                renderProperties(name) -- 刷新 UI 顯示
             else
                 Notify("GunMod", "Save Failed", 3)
             end
         end)
-
+        
         local templates = GetTemplates()
         local isValid = false
         for _, v in ipairs(templates) do if v == SelectedTemplate then isValid = true break end end
         if not isValid then SelectedTemplate = "None" end
-
-        local tplDrop = A:Dropdown("Apply Template", templates, SelectedTemplate, function(opt)
+        
+        local tplDrop = A:Dropdown("Select Template", templates, SelectedTemplate, function(opt)
+            SelectedTemplate = opt
             if opt ~= "None" then
                 local ok, count = ApplyTemplate(opt, setting)
                 if ok then
-                    Notify("GunMod", "Applied: " .. opt .. " (" .. count .. " items)", 3)
-                    SelectedTemplate = opt
-                    -- ✅ 套用模板後，同步寫入實時設定
-                    local allData = GetWeaponSettings()
-                    if not allData[name] then allData[name] = {} end
-                    for k, v in pairs(setting) do
-                        if type(v) == "number" or type(v) == "boolean" or type(v) == "string" then
-                            allData[name][k] = v
-                        end
-                    end
-                    pcall(function() writefile(W_SETTINGS, HttpService:JSONEncode(allData)) end)
-                    renderProperties(name) 
+                    Notify("GunMod", "Applied: " .. opt, 3)
+                    renderProperties(name) -- 套用後刷新
+                else
+                    Notify("GunMod", "Failed to read template", 3)
                 end
-            else
-                SelectedTemplate = "None"
             end
         end)
-
-        A:Button("Overwrite Selected Template", function()
+        
+        A:Button("Delete Selected Template", function()
             if SelectedTemplate ~= "None" then
-                if SaveTemplate(SelectedTemplate, setting) then
-                    Notify("GunMod", "Overwritten Template: " .. SelectedTemplate, 3)
-                else
-                    Notify("GunMod", "Overwrite Failed", 3)
-                end
+                local path = TEMPLATE_DIR .. "/" .. SelectedTemplate .. ".json"
+                if isfile(path) then pcall(function() delfile(path) end) end
+                Notify("GunMod", "Deleted: " .. SelectedTemplate, 3)
+                SelectedTemplate = "None"
+                renderProperties(name) -- 刪除後刷新
             else
                 Notify("GunMod", "No template selected", 3)
             end
         end)
-
+        
         A:Button("Reset to Initial", function()
             if LoadWeaponBackup(name, setting) then
                 Notify("GunMod", "Reset to initial backup", 3)
                 local allData = GetWeaponSettings()
-                allData[name] = {} -- 清空實時設定
+                allData[name] = {}
                 pcall(function() writefile(W_SETTINGS, HttpService:JSONEncode(allData)) end)
                 renderProperties(name)
             else
                 Notify("GunMod", "No backup found", 3)
             end
-        end)
-        A:Button("Clear Backup", function()
-            ClearWeaponBackup(name)
-            Notify("GunMod", "Backup cleared", 3)
         end)
 
         A:Section("Properties for " .. name)
