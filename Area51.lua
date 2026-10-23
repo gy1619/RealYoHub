@@ -117,6 +117,7 @@ end
 
 -- ========== Gun Modded V2 ==========
 -- ========== Gun Modded V2 ==========
+-- ========== Gun Modded V2 ==========
 local function BuildGunModded(A)
     local bridge = A._b
     local scrollHost = bridge.Host
@@ -136,6 +137,29 @@ local function BuildGunModded(A)
             if not isfolder(CFG_DIR) then makefolder(CFG_DIR) end
             if not isfolder(BACKUP_DIR) then makefolder(BACKUP_DIR) end
             if not isfolder(TEMPLATE_DIR) then makefolder(TEMPLATE_DIR) end
+        end
+    end)
+
+    -- Anti-Ghost Sync Fix: Force network ownership refresh to fix desync caused by high fire rate flood
+    task.spawn(function()
+        while task.wait(1) do
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
+                local root = char.HumanoidRootPart
+                local hum = char.Humanoid
+                if hum.MoveDirection.Magnitude > 0 then
+                    pcall(function()
+                        root:SetNetworkOwner(nil)
+                        task.wait(0.02)
+                        root:SetNetworkOwner(LocalPlayer)
+                        if hum then
+                            hum:ChangeState(Enum.HumanoidStateType.Physics)
+                            task.wait(0.05)
+                            hum:ChangeState(Enum.HumanoidStateType.Running)
+                        end
+                    end)
+                end
+            end
         end
     end)
 
@@ -179,7 +203,7 @@ local function BuildGunModded(A)
         if not ok2 or type(data) ~= "table" then return false, 0 end
         local count = 0
         for k, v in pairs(data) do
-            -- ✅ 跳過當前武器沒有的屬性
+            -- Skip properties that do not exist on the current weapon
             if setting[k] ~= nil then
                 local t = type(setting[k])
                 if t == "number" or t == "boolean" or t == "string" then
@@ -247,7 +271,6 @@ local function BuildGunModded(A)
     local function scanWeapons()
         weaponData = {}
         local list, seen = {}, {}
-        -- ✅ 讀取最新的自動保存數據，用於修復重生後配置重置
         local savedData = GetAutoSaveData()
         
         local function tryAdd(tool)
@@ -258,7 +281,7 @@ local function BuildGunModded(A)
             table.insert(list, tool.Name)
             local ok, setting = pcall(require, cfg)
             if ok and type(setting) == "table" then
-                -- ✅ 如果存檔裡有這把武器，立刻覆蓋新實例的屬性
+                -- Apply saved data to the new weapon instance
                 local wData = savedData[tool.Name]
                 if type(wData) == "table" then
                     for k, v in pairs(wData) do
@@ -294,9 +317,8 @@ local function BuildGunModded(A)
 
     local function renderProperties(name)
         local setting = weaponData[name]
-        if not setting then Notify("GunMod", "cannot read " .. name .. " Setting", 3) return end
+        if not setting then Notify("GunMod", "Cannot read " .. name .. " Setting", 3) return end
         
-        -- ✅ 確保有初始備份
         if not isfile(BACKUP_DIR .. "/" .. name .. ".json") then
             SaveWeaponBackup(name, setting)
         end
@@ -328,7 +350,7 @@ local function BuildGunModded(A)
                 local ok, count = ApplyTemplate(opt, setting)
                 if ok then
                     Notify("GunMod", "Applied: " .. opt .. " (" .. count .. " items)", 3)
-                    renderProperties(name) -- 刷新 UI
+                    renderProperties(name)
                 else
                     Notify("GunMod", "Failed to apply template", 3)
                 end
@@ -350,7 +372,7 @@ local function BuildGunModded(A)
         A:Button("Reset to Initial", function()
             if LoadWeaponBackup(name, setting) then
                 Notify("GunMod", "Reset to initial backup", 3)
-                renderProperties(name) -- 瞬間刷新 UI
+                renderProperties(name)
             else
                 Notify("GunMod", "No backup found", 3)
             end
@@ -362,7 +384,6 @@ local function BuildGunModded(A)
 
         A:Section("Properties for " .. name)
 
-        -- 1. 定义主功能关键词列表（按你想要的排序优先级从上到下）
         local CORE_ORDER = {
             "BaseDamage", "FireRate", "BulletPerShot", "MaxClip", "AmmoPerClip", 
             "Clips", "ReloadTime", "Auto", "BurstFireEnabled", "ShotgunEnabled", 
@@ -374,7 +395,6 @@ local function BuildGunModded(A)
         local CORE_SET = {}
         for i, k in ipairs(CORE_ORDER) do CORE_SET[k] = i end
 
-        -- 2. 定义拉黑名单（绝对不显示的纯视觉/动画垃圾）
         local BLACKLIST = {
             HitSoundIDs = true, BulletColor = true, BulletMaterial = true, 
             BulletSize = true, MuzzleOffset = true, MouseIconID = true,
@@ -387,7 +407,6 @@ local function BuildGunModded(A)
             LimitedClipEnabled = true, DelayBeforeFiring = true, DelayAfterFiring = true, ChargingTime = true
         }
 
-        -- 3. 分离主功能和进阶功能
         local coreKeys, extraKeys = {}, {}
         for k, v in pairs(setting) do 
             if not BLACKLIST[k] and not k:find("Animation") and not k:find("Sound") then
@@ -399,18 +418,16 @@ local function BuildGunModded(A)
             end
         end
 
-        -- 4. 排序
         table.sort(coreKeys, function(a, b) return CORE_SET[a] < CORE_SET[b] end)
         table.sort(extraKeys)
 
-        -- 5. 渲染辅助函数
         local function renderKey(key)
             local value = setting[key]
             local t = type(value)
             
             if t == "table" and type(value) == "table" then
                 if value.v == "inf" then
-                    A:Label(key .. " = 无限 (Infinity)")
+                    A:Label(key .. " = Infinity")
                 else
                     A:Label(key .. " = [Table]")
                 end
@@ -430,7 +447,6 @@ local function BuildGunModded(A)
             end
         end
 
-        -- 6. 绘制主功能
         if #coreKeys > 0 then
             A:Label("--- Main ---")
             for _, key in ipairs(coreKeys) do
@@ -438,7 +454,6 @@ local function BuildGunModded(A)
             end
         end
 
-        -- 7. 绘制进阶功能
         if #extraKeys > 0 then
             A:Label("--- Advanced ---")
             for _, key in ipairs(extraKeys) do
