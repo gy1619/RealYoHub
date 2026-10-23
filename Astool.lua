@@ -590,10 +590,34 @@ local function MakeSlider(parent, text, min, max, default, cb, group, register)
     return handle
 end
 
+-- ✅ 补齐丢失的 openDropdown 定义和防报错关闭逻辑
+local openDropdown = nil
+local function CloseDropdown() 
+    if openDropdown then 
+        pcall(function() openDropdown.Visible = false end)
+        openDropdown = nil 
+    end
+end
+UserInputService.InputBegan:Connect(function(inp)
+    if openDropdown then
+        if not openDropdown.Parent then
+            openDropdown = nil
+        elseif (inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch) then
+            local success, isOutside = pcall(function()
+                local p = inp.Position
+                local lp = openDropdown.AbsolutePosition
+                local ls = openDropdown.AbsoluteSize
+                return p.X < lp.X or p.X > lp.X + ls.X or p.Y < lp.Y or p.Y > lp.Y + ls.Y
+            end)
+            if not success or isOutside then CloseDropdown() end
+        end
+    end
+end)
+
 local function MakeDropdown(parent, text, options, default, cb, group, register)
     if register == nil then register = true end
     local row = AsFlow(parent).Add(S(150) + EstW(text, TS(12)) + S(16), S(30))
-    -- ✅ 修復白底：使用 AP.Comp 和 AP.Text 跟隨主題
+    
     local btn = Create("TextButton", {
         Size = UDim2.fromOffset(S(150), S(26)), BackgroundColor3 = AP.Comp, BackgroundTransparency = AP.CompT,
         Text = tostring(default) .. " v", TextColor3 = AP.Text, TextSize = TS(12),
@@ -641,10 +665,13 @@ local function MakeDropdown(parent, text, options, default, cb, group, register)
     handle.Row = row
     function handle.SetOptions(opts) buildOptions(opts) end
     function handle.Set(v) setValue(v, false) end
+    
     SafeClick(btn, function()
         if openDropdown == list then CloseDropdown() return end
         CloseDropdown()
-        list.Position = UDim2.fromOffset(btn.AbsolutePosition.X, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y + S(4))
+        pcall(function()
+            list.Position = UDim2.fromOffset(btn.AbsolutePosition.X, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y + S(4))
+        end)
         list.Visible = true; openDropdown = list
     end)
     
