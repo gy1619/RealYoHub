@@ -646,6 +646,7 @@ end
 
 -- ========== Area 51 ==========
 -- ========== Area 51 ==========
+-- ========== Area 51 ==========
 local function BuildArea51(A)
     local speedHackEnabled = false
     local speedHackConn = nil
@@ -724,13 +725,12 @@ local function BuildArea51(A)
         end)
     end
 
-    -- ✅ 改成滑條 (0-100)，0代表關閉，5-100代表具體高度
     A:Slider("Fly Height", 0, 100, 0, function(height)
         flyHeight = height
         updateFlyHeight(LocalPlayer.Character)
     end)
 
-    -- ✅ 統一在這裡處理重生，避免重複綁定監聽導致卡頓
+    -- ✅ 統一在這裡處理重生
     LocalPlayer.CharacterAdded:Connect(function(char)
         task.wait(1)
         applySpeedHack(char)
@@ -779,131 +779,105 @@ local function BuildArea51(A)
     AddWeaponButton("Vulcan", Vector3.new(625.76, 1127.85, 749.51), Vector3.new(-600.846, 950.275, 154.955))
     AddWeaponButton("Ice Crossbow", Vector3.new(625.76, 1127.85, 749.51), Vector3.new(243.564, 687.29, 943.856))
 
+    -- ✅ 終極版自動領取：支持會彈跳的 Ball，動態追蹤強制視角
     A:Toggle("Auto Supply Crate", false, function(state)
-    if not state then
-        if _G.RealSupplyLoop then _G.RealSupplyLoop = false end
-        return
-    end
-    
-    local player = LocalPlayer
-    local safePoint = CFrame.new(625.76, 1127.85, 749.51)
-    _G.RealSupplyLoop = true
-    
-    task.spawn(function()
-        while _G.RealSupplyLoop do
-            task.wait(1.2)
-            pcall(function()
-                local char = player.Character or player.CharacterAdded:Wait()
-                local root = char:FindFirstChild("HumanoidRootPart")
-                local hum = char:FindFirstChild("Humanoid")
-                if not root or not hum or hum.Health <= 0 then return end
-                
-                local supplies = {}
-                for _, obj in ipairs(Workspace:GetChildren()) do
-                    if obj.Name == "SupplyCrate" or obj.Name == "Ball" then
-                        table.insert(supplies, obj)
-                    end
-                end
-                if #supplies == 0 then return end
-                
-                for _, supply in ipairs(supplies) do
-                    -- 跳過黑名單座標
-                    if (supply.Position - Vector3.new(-816, 5181, 493)).Magnitude > 5
-                    and (supply.Position - Vector3.new(-816, 5181, 630)).Magnitude > 5
-                    and (supply.Position - Vector3.new(-816, 5181, 376)).Magnitude > 5 then
-                        
-                        -- 🛑 1. 中轉安全點 (過檢查點)
-                        root.CFrame = safePoint
-                        task.wait(1.5)
-                        
-                        -- 🚀 2. 計算地下懸空點
-                        local targetPos = supply.Position + Vector3.new(0, -10, 0)
-                        
-                        -- 🛡️ 3. 關閉碰撞並傳送
-                        for _, p in ipairs(char:GetDescendants()) do
-                            if p:IsA("BasePart") then p.CanCollide = false end
-                        end
-                        root.CFrame = CFrame.new(targetPos)
-                        
-                        -- 📷 4. 強制相機與角色朝向對準盒子
-                        local cam = workspace.CurrentCamera
-                        local oldCamType = cam.CameraType
-                        cam.CameraType = Enum.CameraType.Scriptable
-                        cam.CFrame = CFrame.new(targetPos, supply.Position) -- 相機往上看
-                        root.CFrame = CFrame.new(targetPos, supply.Position) -- 角色往上看
-                        
-                        -- ⚡ 5. 懸停高頻嘗試 (持續 0.8 秒)
-                        local startTime = tick()
-                        while tick() - startTime < 0.8 do
-                            if not supply.Parent then break end -- 如果盒子被拿走了就提早結束
-                            
-                            for _, desc in ipairs(supply:GetDescendants()) do
-                                if desc:IsA("ProximityPrompt") then
-                                    desc.MaxActivationDistance = 100
-                                    desc.HoldDuration = 0
-                                    fireproximityprompt(desc)
-                                end
-                            end
-                            task.wait(0.05) -- 每 0.05 秒瘋狂嘗試
-                        end
-                        
-                        -- 🔄 6. 恢復相機、碰撞、拉回安全點
-                        cam.CameraType = oldCamType
-                        root.CFrame = safePoint
-                        for _, p in ipairs(char:GetDescendants()) do
-                            if p:IsA("BasePart") then p.CanCollide = true end
-                        end
-                        
-                        task.wait(0.3) -- 稍微冷卻一下
-                    end
-                end
-            end)
+        if not state then
+            if _G.RealSupplyLoop then _G.RealSupplyLoop = false end
+            return
         end
-    end)
-end)
-
-    A:Button("Supply Instant Pickup", function()
+        
+        local player = LocalPlayer
+        local char = player.Character or player.CharacterAdded:Wait()
+        local hrp = char:WaitForChild("HumanoidRootPart")
+        local lastMovingPos = hrp.CFrame
+        _G.RealSupplyLoop = true
+        
+        -- 實時跟蹤玩家移動位置
         task.spawn(function()
-            while task.wait(2) do
-                for _, v in ipairs(Workspace:GetDescendants()) do
-                    if v:IsA("ProximityPrompt") and v.Parent and (v.Parent.Name:find("Supply") or (v.Parent.Parent and v.Parent.Parent.Name:find("Supply"))) then
-                        v.HoldDuration = 0
+            while _G.RealSupplyLoop do
+                task.wait(0.1)
+                pcall(function()
+                    local hum = player.Character and player.Character:FindFirstChild("Humanoid")
+                    if hum and hum.MoveDirection.Magnitude > 0 then
+                        lastMovingPos = player.Character.HumanoidRootPart.CFrame
                     end
-                end
+                end)
             end
         end)
-        Notify("Supply", "Instant pickup enabled", 6)
-    end)
 
-    local blacklistCoordinates = {
-        Vector3.new(-816, 5181, 493),
-        Vector3.new(-816, 5181, 630),
-        Vector3.new(-816, 5181, 376),
-    }
-    local function teleportToRandomSupply(supplyName)
-        pcall(function()
-            local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-            local hrp = character:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-            local supplies, valid = {}, {}
-            for _, obj in ipairs(Workspace:GetChildren()) do
-                if obj.Name == supplyName then table.insert(supplies, obj) end
+        task.spawn(function()
+            while _G.RealSupplyLoop do
+                task.wait(1.2)
+                pcall(function()
+                    local char = player.Character or player.CharacterAdded:Wait()
+                    local root = char:FindFirstChild("HumanoidRootPart")
+                    local hum = char:FindFirstChild("Humanoid")
+                    if not root or not hum or hum.Health <= 0 then return end
+                    
+                    local supplies = {}
+                    for _, obj in ipairs(Workspace:GetChildren()) do
+                        if obj.Name == "SupplyCrate" or obj.Name == "Ball" then
+                            table.insert(supplies, obj)
+                        end
+                    end
+                    if #supplies == 0 then return end
+                    
+                    for _, supply in ipairs(supplies) do
+                        -- 跳過黑名單座標（原本的出生點）
+                        if (supply.Position - Vector3.new(-816, 5181, 493)).Magnitude > 5
+                        and (supply.Position - Vector3.new(-816, 5181, 630)).Magnitude > 5
+                        and (supply.Position - Vector3.new(-816, 5181, 376)).Magnitude > 5 then
+                            
+                            -- 🛑 1. 中轉到你當前位置（過檢查點）
+                            root.CFrame = lastMovingPos
+                            task.wait(1.5)
+                            
+                            -- 🛡️ 2. 關閉碰撞
+                            for _, p in ipairs(char:GetDescendants()) do
+                                if p:IsA("BasePart") then p.CanCollide = false end
+                            end
+                            
+                            local cam = workspace.CurrentCamera
+                            local oldCamType = cam.CameraType
+                            cam.CameraType = Enum.CameraType.Scriptable
+                            
+                            -- ⚡ 3. 高頻懸空鎖定（針對球會彈跳的特性動態追蹤）
+                            local startTime = tick()
+                            while tick() - startTime < 1.0 do
+                                if not supply.Parent then break end -- 如果盒子被拿走了就提早結束
+                                
+                                -- 實時獲取當前座標（球會動）
+                                local targetPos = supply.Position + Vector3.new(0, -10, 0)
+                                root.CFrame = CFrame.new(targetPos)
+                                
+                                -- 📷 強制相機與角色朝向對準目標
+                                cam.CFrame = CFrame.new(targetPos, supply.Position) 
+                                root.CFrame = CFrame.new(targetPos, supply.Position) 
+                                
+                                for _, desc in ipairs(supply:GetDescendants()) do
+                                    if desc:IsA("ProximityPrompt") then
+                                        desc.MaxActivationDistance = 100
+                                        desc.HoldDuration = 0
+                                        fireproximityprompt(desc)
+                                    end
+                                end
+                                task.wait(0.03) -- 極高刷新率，球彈到哪跟到哪
+                            end
+                            
+                            -- 🔄 4. 恢復相機與碰撞，拉回原位
+                            cam.CameraType = oldCamType
+                            root.CFrame = lastMovingPos
+                            for _, p in ipairs(char:GetDescendants()) do
+                                if p:IsA("BasePart") then p.CanCollide = true end
+                            end
+                            
+                            task.wait(0.3)
+                        end
+                    end
+                end)
             end
-            if #supplies == 0 then return end
-            for _, supply in ipairs(supplies) do
-                local blacklisted = false
-                for _, bc in ipairs(blacklistCoordinates) do
-                    if (supply.Position - bc).Magnitude < 5 then blacklisted = true break end
-                end
-                if not blacklisted then table.insert(valid, supply) end
-            end
-            if #valid == 0 then return end
-            local target = valid[math.random(1, #valid)]
-            hrp.CFrame = target.CFrame + Vector3.new(0, 3, 0)
         end)
-    end
-    A:Button("TP to Random SupplyCrate", function() teleportToRandomSupply("SupplyCrate") end)
-    A:Button("TP to Random SupplyBall", function() teleportToRandomSupply("SupplyBall") end)
+    end)
 
     A:Button("Destroy All Damage Parts", function()
         for _, v in ipairs(Workspace:GetDescendants()) do
@@ -969,6 +943,7 @@ local function BuildTeleport(A)
 end
 
 -- ========== FE Tools ==========
+-- ========== FE Tools ==========
 local function BuildFETools(A)
     local connections = {}
 
@@ -1032,19 +1007,6 @@ local function BuildFETools(A)
             table.insert(connections, UserInputService.JumpRequest:Connect(function()
                 local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
                 if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
-            end))
-        else
-            for _, c in ipairs(connections) do c:Disconnect() end
-            connections = {}
-        end
-    end)
-
-    A:Toggle("Auto Interact", false, function(v)
-        if v then
-            table.insert(connections, RunService.Heartbeat:Connect(function()
-                for _, obj in ipairs(Workspace:GetDescendants()) do
-                    if obj:IsA("ProximityPrompt") then fireproximityprompt(obj) end
-                end
             end))
         else
             for _, c in ipairs(connections) do c:Disconnect() end
