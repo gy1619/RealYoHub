@@ -894,7 +894,7 @@ end
 if Runtime.Mode == "Host" and DefCheck() then
     local bridge = Runtime.Bridge
     SafeCall("Build Area51", function() bridge:UsePageIndex(1, 1, "Replace"); BuildArea51(BridgeAdapter(bridge)) end)
-    SafeCall("Build GunModded", function() bridge:UsePageIndex(1, 2, "Replace"); dedded(BridgeAdapter(bridge)) end)
+    SafeCall("Build GunModded", function() bridge:UsePageIndex(1, 2, "Replace"); BuildGunModded(BridgeAdapter(bridge)) end)
     SafeCall("Build Teleport", function() bridge:UsePageIndex(1, 3, "Replace"); BuildTeleport(BridgeAdapter(bridge)) end)
     SafeCall("Build FETools", function() bridge:UsePageIndex(1, 4, "Replace"); BuildFETools(BridgeAdapter(bridge)) end)
     SafeCall("Focus", function() bridge:Focus() end)
