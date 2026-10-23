@@ -115,6 +115,7 @@ local function BridgeAdapter(bridge)
 end
 
 -- ========== Gun Modded V2 ==========
+-- ========== Gun Modded V2 ==========
 local function BuildGunModded(A)
     local bridge = A._b
     local scrollHost = bridge.Host
@@ -129,7 +130,7 @@ local function BuildGunModded(A)
     local CFG_DIR = "RealYo_Configs"
     local BACKUP_DIR = CFG_DIR .. "/WeaponBackups"
     local TEMPLATE_DIR = CFG_DIR .. "/WeaponTemplates"
-    local W_SETTINGS = CFG_DIR .. "/WeaponSettings.json" -- ✅ 武器實時配置儲存點
+    local W_SETTINGS = CFG_DIR .. "/WeaponSettings.json"
 
     pcall(function()
         if type(makefolder) == "function" then
@@ -156,22 +157,29 @@ local function BuildGunModded(A)
                             task.wait(0.05)
                             hum:ChangeState(Enum.HumanoidStateType.Running)
                         end
-                        Notify("Anti-Ghost", "Forcing Network Sync!", 2) -- ✅ 觸發自救提示
+                        Notify("Anti-Ghost", "Forcing Network Sync!", 2)
                     end)
                 end
             end
         end
     end)
 
+    -- ✅ 內存緩存與防抖保存，解決卡死問題
+    local cachedWeaponSettings = nil
+    local saveTask = nil
+
     local function GetWeaponSettings()
+        if cachedWeaponSettings then return cachedWeaponSettings end
+        local data = {}
         if type(isfile) == "function" and isfile(W_SETTINGS) then
             local ok, raw = pcall(readfile, W_SETTINGS)
             if ok and raw then
-                local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
-                if ok2 and type(data) == "table" then return data end
+                local ok2, decoded = pcall(function() return HttpService:JSONDecode(raw) end)
+                if ok2 and type(decoded) == "table" then data = decoded end
             end
         end
-        return {}
+        cachedWeaponSettings = data
+        return data
     end
 
     local function SaveWeaponSetting(wName, key, val)
@@ -179,7 +187,11 @@ local function BuildGunModded(A)
         local allData = GetWeaponSettings()
         if not allData[wName] then allData[wName] = {} end
         allData[wName][key] = val
-        pcall(function() writefile(W_SETTINGS, HttpService:JSONEncode(allData)) end)
+        
+        if saveTask then task.cancel(saveTask) end
+        saveTask = task.delay(1.0, function()
+            pcall(function() writefile(W_SETTINGS, HttpService:JSONEncode(allData)) end)
+        end)
     end
 
     local function GetTemplates()
@@ -265,7 +277,7 @@ local function BuildGunModded(A)
     local function scanWeapons()
         weaponData = {}
         local list, seen = {}, {}
-        local wSettings = GetWeaponSettings() -- ✅ 加載實時武器設定
+        local wSettings = GetWeaponSettings()
         
         local function tryAdd(tool)
             if not (tool and tool:IsA("Tool")) then return end
@@ -275,7 +287,6 @@ local function BuildGunModded(A)
             table.insert(list, tool.Name)
             local ok, setting = pcall(require, cfg)
             if ok and type(setting) == "table" then
-                -- ✅ 覆蓋實時保存的屬性，確保重生後不丟失
                 local saved = wSettings[tool.Name]
                 if type(saved) == "table" then
                     for k, v in pairs(saved) do
@@ -353,7 +364,7 @@ local function BuildGunModded(A)
         bridge.Host = dynFrame
 
         A:Section("Templates & Backups")
-
+        
         local tplName = ""
         A:Input("Template Name", "Enter Name...", function(v) tplName = v end)
         
@@ -363,72 +374,92 @@ local function BuildGunModded(A)
             if SaveTemplate(n, setting) then
                 Notify("GunMod", "Saved: " .. n, 3)
                 SelectedTemplate = n
-                -- ✅ 延遲重建，防止點擊事件衝突卡死
-                task.delay(0.2, function() renderProperties(name) end) 
+                tplDrop.SetOptions(GetTemplates())
+                tplDrop.Set(n)
             else
                 Notify("GunMod", "Save Failed", 3)
             end
         end)
-        
+
         local templates = GetTemplates()
         local isValid = false
         for _, v in ipairs(templates) do if v == SelectedTemplate then isValid = true break end end
-        if not isValid and SelectedTemplate ~= "None" then
-            table.insert(templates, SelectedTemplate)
-        end
+        if not isValid and SelectedTemplate ~= "None" then table.insert(templates, SelectedTemplate) end
         table.sort(templates, function(a, b) 
             if a == "None" then return true end
             if b == "None" then return false end
             return a < b 
         end)
-        
+
+        local uiElements = {}
+
         local tplDrop = A:Dropdown("Select Template", templates, SelectedTemplate, function(opt)
             SelectedTemplate = opt
             if opt ~= "None" then
                 local ok, count = ApplyTemplate(opt, setting)
                 if ok then
                     Notify("GunMod", "Applied: " .. opt, 3)
-                    -- ✅ 後台異步保存配置，不卡主線程
-                    task.spawn(function()
-                        local allData = GetWeaponSettings()
-                        if not allData[name] then allData[name] = {} end
-                        for k, v in pairs(setting) do
-                            if type(v) == "number" or type(v) == "boolean" or type(v) == "string" then
-                                allData[name][k] = v
+                    
+                    -- ✅ 原地更新現有 UI，不卡死
+                    for k, v in pairs(setting) do
+                        if uiElements[k] and uiElements[k].handle and uiElements[k].handle.Set then
+                            if uiElements[k].isFloat then
+                                uiElements[k].handle.Set(math.floor(v * 100 + 0.5))
+                            else
+                                uiElements[k].handle.Set(v)
                             end
                         end
+                    end
+
+                    -- ✅ 統一批量保存
+                    local allData = GetWeaponSettings()
+                    if not allData[name] then allData[name] = {} end
+                    for k, v in pairs(setting) do
+                        if type(v) == "number" or type(v) == "boolean" or type(v) == "string" then
+                            allData[name][k] = v
+                        end
+                    end
+                    if saveTask then task.cancel(saveTask) end
+                    saveTask = task.delay(1.0, function()
                         pcall(function() writefile(W_SETTINGS, HttpService:JSONEncode(allData)) end)
                     end)
-                    -- ✅ 延遲重建，讓下拉選單先完全收起
-                    task.delay(0.2, function() renderProperties(name) end)
                 end
             end
         end)
-        
+
         A:Button("Delete Selected", function()
             if SelectedTemplate ~= "None" then
                 local path = TEMPLATE_DIR .. "/" .. SelectedTemplate .. ".json"
                 if isfile(path) then pcall(function() delfile(path) end) end
                 Notify("GunMod", "Deleted: " .. SelectedTemplate, 3)
                 SelectedTemplate = "None"
-                -- ✅ 延遲重建
-                task.delay(0.2, function() renderProperties(name) end)
+                tplDrop.SetOptions(GetTemplates())
+                tplDrop.Set("None")
             else
                 Notify("GunMod", "No template selected", 3)
             end
         end)
-        
+
         A:Button("Reset to Initial", function()
             if LoadWeaponBackup(name, setting) then
                 Notify("GunMod", "Reset to initial backup", 3)
-                -- ✅ 後台異步保存配置
-                task.spawn(function()
-                    local allData = GetWeaponSettings()
-                    allData[name] = {}
+                -- ✅ 原地更新 UI
+                for k, v in pairs(setting) do
+                    if uiElements[k] and uiElements[k].handle and uiElements[k].handle.Set then
+                        if uiElements[k].isFloat then
+                            uiElements[k].handle.Set(math.floor(v * 100 + 0.5))
+                        else
+                            uiElements[k].handle.Set(v)
+                        end
+                    end
+                end
+                -- ✅ 清理保存
+                local allData = GetWeaponSettings()
+                allData[name] = {}
+                if saveTask then task.cancel(saveTask) end
+                saveTask = task.delay(1.0, function()
                     pcall(function() writefile(W_SETTINGS, HttpService:JSONEncode(allData)) end)
                 end)
-                -- ✅ 延遲重建
-                task.delay(0.2, function() renderProperties(name) end)
             else
                 Notify("GunMod", "No backup found", 3)
             end
@@ -471,28 +502,27 @@ local function BuildGunModded(A)
             local value = setting[key]
             local t = type(value)
             
-            -- ✅ 核心修改：修改後立刻持久化保存到 WeaponSettings.json
             if t == "table" and type(value) == "table" then
                 if value.v == "inf" then A:Label(key .. " = Infinity") else A:Label(key .. " = [Table]") end
             elseif t == "boolean" then
-                A:Toggle(key, value, function(v) 
+                uiElements[key] = { handle = A:Toggle(key, value, function(v) 
                     setting[key] = v 
                     SaveWeaponSetting(name, key, v)
-                end, name)
+                end, name), isFloat = false }
             elseif t == "number" then
                 if key:match("ID$") or key:match("Id$") then
                     A:Label(key .. " = " .. tostring(value))
                 elseif value == math.floor(value) then
-                    A:Slider(key, 0, 500, value, function(v) 
+                    uiElements[key] = { handle = A:Slider(key, 0, 500, value, function(v) 
                         setting[key] = v 
                         SaveWeaponSetting(name, key, v)
-                    end, name)
+                    end, name), isFloat = false }
                 else
                     local v100 = math.floor(value * 100 + 0.5)
-                    A:Slider(key .. " (x0.01)", 0, 500, v100, function(v) 
+                    uiElements[key] = { handle = A:Slider(key .. " (x0.01)", 0, 500, v100, function(v) 
                         setting[key] = v / 100 
                         SaveWeaponSetting(name, key, v / 100)
-                    end, name)
+                    end, name), isFloat = true }
                 end
             elseif t == "string" then
                 A:Label(key .. " = " .. tostring(value))
@@ -556,7 +586,7 @@ local function BuildGunModded(A)
         (#list > 0) and list or { "No weapons" },
         (#list > 0) and list[1] or "No weapons",
         function(selected) 
-            SelectedTemplate = "None" -- 切換武器重置模板狀態
+            SelectedTemplate = "None" 
             renderProperties(selected) 
         end)
     A:Section("Instructions")
