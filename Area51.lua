@@ -364,23 +364,11 @@ local function BuildGunModded(A)
         bridge.Host = dynFrame
 
         A:Section("Templates & Backups")
-        
-        local tplName = ""
-        A:Input("Template Name", "Enter Name...", function(v) tplName = v end)
-        
-        A:Button("Save / Overwrite", function()
-            local n = tplName:gsub("^%s+", ""):gsub("%s+$", "")
-            if n == "" then Notify("GunMod", "Name required!", 3) return end
-            if SaveTemplate(n, setting) then
-                Notify("GunMod", "Saved: " .. n, 3)
-                SelectedTemplate = n
-                tplDrop.SetOptions(GetTemplates())
-                tplDrop.Set(n)
-            else
-                Notify("GunMod", "Save Failed", 3)
-            end
-        end)
 
+        local tplName = ""
+        local tplInput = A:Input("Template Name", "Enter Name...", function(v) tplName = v end)
+        
+        -- ✅ 核心修复：强制更新本地 UI 列表，不依赖硬盘读取延迟
         local templates = GetTemplates()
         local isValid = false
         for _, v in ipairs(templates) do if v == SelectedTemplate then isValid = true break end end
@@ -390,17 +378,56 @@ local function BuildGunModded(A)
             if b == "None" then return false end
             return a < b 
         end)
-
+        
         local uiElements = {}
-
-        local tplDrop = A:Dropdown("Select Template", templates, SelectedTemplate, function(opt)
+        local tplDrop
+        
+        local function refreshDropList(newName)
+            if newName and newName ~= "" and newName ~= "None" then
+                local exists = false
+                for _, v in ipairs(templates) do if v == newName then exists = true break end end
+                if not exists then
+                    table.insert(templates, newName)
+                    table.sort(templates, function(a, b) 
+                        if a == "None" then return true end
+                        if b == "None" then return false end
+                        return a < b 
+                    end)
+                end
+            end
+            if tplDrop then
+                tplDrop.SetOptions(templates)
+                tplDrop.Set(SelectedTemplate)
+            end
+        end
+        
+        A:Button("Save / Overwrite", function()
+            -- 双重保险，如果 tplName 为空，尝试从输入框强行读取
+            if tplName == "" and tplInput and tplInput.Text then
+                tplName = tplInput.Text
+            end
+            local n = tplName:gsub("^%s+", ""):gsub("%s+$", "")
+            if n == "" then Notify("GunMod", "Name required!", 3) return end
+            
+            if SaveTemplate(n, setting) then
+                Notify("GunMod", "Saved: " .. n, 3)
+                SelectedTemplate = n
+                refreshDropList(n) -- 立刻刷新下拉框
+                -- 延迟重建，防止与输入框焦点冲突
+                task.delay(0.1, function() renderProperties(name) end) 
+            else
+                Notify("GunMod", "Save Failed", 3)
+            end
+        end)
+        
+        tplDrop = A:Dropdown("Select Template", templates, SelectedTemplate, function(opt)
             SelectedTemplate = opt
             if opt ~= "None" then
                 local ok, count = ApplyTemplate(opt, setting)
                 if ok then
                     Notify("GunMod", "Applied: " .. opt, 3)
                     
-                    -- ✅ 原地更新現有 UI，不卡死
+                    -- 原地更新现有 UI，不卡死
                     for k, v in pairs(setting) do
                         if uiElements[k] and uiElements[k].handle and uiElements[k].handle.Set then
                             if uiElements[k].isFloat then
@@ -410,8 +437,8 @@ local function BuildGunModded(A)
                             end
                         end
                     end
-
-                    -- ✅ 統一批量保存
+        
+                    -- 统一批量保存
                     local allData = GetWeaponSettings()
                     if not allData[name] then allData[name] = {} end
                     for k, v in pairs(setting) do
@@ -426,24 +453,33 @@ local function BuildGunModded(A)
                 end
             end
         end)
-
+        
         A:Button("Delete Selected", function()
             if SelectedTemplate ~= "None" then
                 local path = TEMPLATE_DIR .. "/" .. SelectedTemplate .. ".json"
                 if isfile(path) then pcall(function() delfile(path) end) end
                 Notify("GunMod", "Deleted: " .. SelectedTemplate, 3)
+                
+                -- 从本地列表中移除
+                for i = #templates, 1, -1 do
+                    if templates[i] == SelectedTemplate then
+                        table.remove(templates, i)
+                        break
+                    end
+                end
+                
                 SelectedTemplate = "None"
-                tplDrop.SetOptions(GetTemplates())
-                tplDrop.Set("None")
+                refreshDropList()
+                task.delay(0.1, function() renderProperties(name) end)
             else
                 Notify("GunMod", "No template selected", 3)
             end
         end)
-
+        
         A:Button("Reset to Initial", function()
             if LoadWeaponBackup(name, setting) then
                 Notify("GunMod", "Reset to initial backup", 3)
-                -- ✅ 原地更新 UI
+                -- 原地更新 UI
                 for k, v in pairs(setting) do
                     if uiElements[k] and uiElements[k].handle and uiElements[k].handle.Set then
                         if uiElements[k].isFloat then
@@ -453,7 +489,7 @@ local function BuildGunModded(A)
                         end
                     end
                 end
-                -- ✅ 清理保存
+                -- 清理保存
                 local allData = GetWeaponSettings()
                 allData[name] = {}
                 if saveTask then task.cancel(saveTask) end
