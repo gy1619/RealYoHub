@@ -786,8 +786,7 @@ local function BuildArea51(A)
     end
     
     local player = LocalPlayer
-    -- 中轉安全點（用來過檢查點）
-    local safePoint = CFrame.new(625.76, 1127.85, 749.51) 
+    local safePoint = CFrame.new(625.76, 1127.85, 749.51)
     _G.RealSupplyLoop = true
     
     task.spawn(function()
@@ -813,39 +812,49 @@ local function BuildArea51(A)
                     and (supply.Position - Vector3.new(-816, 5181, 630)).Magnitude > 5
                     and (supply.Position - Vector3.new(-816, 5181, 376)).Magnitude > 5 then
                         
-                        -- 🛑 第一步：先回中轉安全點，停留 1.5 秒過檢查點
+                        -- 🛑 1. 中轉安全點 (過檢查點)
                         root.CFrame = safePoint
-                        task.wait(1.5) 
+                        task.wait(1.5)
                         
-                        -- 🚀 第二步：計算箱子正下方的位置（往下沉 10 個 Studs）
+                        -- 🚀 2. 計算地下懸空點
                         local targetPos = supply.Position + Vector3.new(0, -10, 0)
                         
-                        -- 🛡️ 第三步：開啟穿牆，瞬移到地下
+                        -- 🛡️ 3. 關閉碰撞並傳送
                         for _, p in ipairs(char:GetDescendants()) do
                             if p:IsA("BasePart") then p.CanCollide = false end
                         end
                         root.CFrame = CFrame.new(targetPos)
-                        task.wait(0.05) 
                         
-                        -- ⚡ 第四步：距離改大並觸發 Prompt
-                        for _, desc in ipairs(supply:GetDescendants()) do
-                            if desc:IsA("ProximityPrompt") then
-                                desc.MaxActivationDistance = 100
-                                desc.HoldDuration = 0
-                                fireproximityprompt(desc)
+                        -- 📷 4. 強制相機與角色朝向對準盒子
+                        local cam = workspace.CurrentCamera
+                        local oldCamType = cam.CameraType
+                        cam.CameraType = Enum.CameraType.Scriptable
+                        cam.CFrame = CFrame.new(targetPos, supply.Position) -- 相機往上看
+                        root.CFrame = CFrame.new(targetPos, supply.Position) -- 角色往上看
+                        
+                        -- ⚡ 5. 懸停高頻嘗試 (持續 0.8 秒)
+                        local startTime = tick()
+                        while tick() - startTime < 0.8 do
+                            if not supply.Parent then break end -- 如果盒子被拿走了就提早結束
+                            
+                            for _, desc in ipairs(supply:GetDescendants()) do
+                                if desc:IsA("ProximityPrompt") then
+                                    desc.MaxActivationDistance = 100
+                                    desc.HoldDuration = 0
+                                    fireproximityprompt(desc)
+                                end
                             end
+                            task.wait(0.05) -- 每 0.05 秒瘋狂嘗試
                         end
                         
-                        -- 🚀 第五步：拿完瞬間拉回安全點
-                        task.wait(0.05)
+                        -- 🔄 6. 恢復相機、碰撞、拉回安全點
+                        cam.CameraType = oldCamType
                         root.CFrame = safePoint
-                        
-                        -- 恢復碰撞
                         for _, p in ipairs(char:GetDescendants()) do
                             if p:IsA("BasePart") then p.CanCollide = true end
                         end
                         
-                        task.wait(0.3)
+                        task.wait(0.3) -- 稍微冷卻一下
                     end
                 end
             end)
