@@ -104,20 +104,17 @@ local function BridgeAdapter(bridge)
     function A:Section(t) return self._b:Section(t) end
     function A:Label(t) return self._b:Label(t) end
     function A:Button(t, cb) return self._b:Button(t, cb) end
-    function A:Toggle(t, def, cb, group) return self._b:Toggle(t, def, cb, { Group = group }) end
-    function A:Slider(t, min, max, def, cb, group) return self._b:Slider(t, min, max, def, cb, { Group = group }) end
+    function A:Toggle(t, def, cb, group) return self._b:Toggle(t, def, cb, { Group = group, Register = false }) end
+    function A:Slider(t, min, max, def, cb, group) return self._b:Slider(t, min, max, def, cb, { Group = group, Register = false }) end
     function A:Input(t, placeholder, cb)
         local box = self._b:TextBox(placeholder, "")
         if box then box:GetPropertyChangedSignal("Text"):Connect(function() cb(box.Text) end) end
         return box
     end
-    function A:Dropdown(t, opts, def, cb) return self._b:Dropdown(t, opts, def, cb) end
+    function A:Dropdown(t, opts, def, cb, group) return self._b:Dropdown(t, opts, def, cb, { Group = group, Register = false }) end
     return A
 end
 
--- ========== Gun Modded V2 ==========
--- ========== Gun Modded V2 ==========
--- ========== Gun Modded V2 ==========
 -- ========== Gun Modded V2 ==========
 local function BuildGunModded(A)
     local bridge = A._b
@@ -143,8 +140,7 @@ local function BuildGunModded(A)
         end
     end)
 
-    -- 防幽靈
-    -- ✅ 防幽靈自救 (加入 Toast 提示)
+    -- ✅ 防幽靈自救
     task.spawn(function()
         while task.wait(1) do
             local char = LocalPlayer.Character
@@ -161,8 +157,7 @@ local function BuildGunModded(A)
                             task.wait(0.05)
                             hum:ChangeState(Enum.HumanoidStateType.Running)
                         end
-                        -- ✅ 觸發自救時彈出提示
-                        Notify("Anti-Ghost", "Forcing Network Sync...", 2)
+                        Notify("Anti-Ghost", "Forcing Network Sync!", 2) -- ✅ 觸發自救提示
                     end)
                 end
             end
