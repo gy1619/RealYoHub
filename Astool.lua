@@ -589,13 +589,14 @@ end)
 
 local function MakeDropdown(parent, text, options, default, cb, group)
     local row = AsFlow(parent).Add(S(150) + EstW(text, TS(12)) + S(16), S(30))
+    -- ✅ 修复：将死白底改为跟随主题的动态颜色
     local btn = Create("TextButton", {
-        Size = UDim2.fromOffset(S(150), S(26)), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 0.35,
-        Text = default .. " v", TextColor3 = COL.TextDark, TextSize = TS(12),
+        Size = UDim2.fromOffset(S(150), S(26)), BackgroundColor3 = AP.Comp, BackgroundTransparency = AP.CompT,
+        Text = tostring(default) .. " v", TextColor3 = AP.Text, TextSize = TS(12),
         Font = Enum.Font.GothamMedium, AutoButtonColor = false, Parent = row,
     })
     AddCorner(btn, S(5))
-    Create("UIStroke", { Thickness = 1, Color = Color3.fromRGB(160, 160, 160), Transparency = 0.4 }, btn)
+    Create("UIStroke", { Thickness = 1, Color = AP.Stroke, Transparency = 0.4 }, btn)
     Create("TextLabel", {
         Size = UDim2.new(1, -S(154), 1, 0), Position = UDim2.fromOffset(S(154), 0), BackgroundTransparency = 1,
         Text = text, TextColor3 = COL.TextDim, TextSize = TS(12), Font = Enum.Font.Gotham,
@@ -612,7 +613,7 @@ local function MakeDropdown(parent, text, options, default, cb, group)
     local handle = {}; local cur = default
     local function setValue(v, fire)
         cur = v
-        btn.Text = tostring(v) .. " v" -- 確保無論傳什麼進來都能正常顯示
+        btn.Text = tostring(v) .. " v" -- ✅ 強制刷新文字
         if cb then cb(v) end
         if fire then TriggerAutoSave() end
     end
@@ -635,7 +636,8 @@ local function MakeDropdown(parent, text, options, default, cb, group)
     buildOptions(options)
     handle.Row = row
     function handle.SetOptions(opts) buildOptions(opts) end
-    function handle.Set(v) setValue(v, false) end -- ✅ 暴露外部強刷介面
+    function handle.Set(v) setValue(v, false) end -- ✅ 暴露強刷介面
+    
     SafeClick(btn, function()
         if openDropdown == list then CloseDropdown() return end
         CloseDropdown()
