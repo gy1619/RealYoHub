@@ -363,7 +363,8 @@ local function BuildGunModded(A)
             if SaveTemplate(n, setting) then
                 Notify("GunMod", "Saved: " .. n, 3)
                 SelectedTemplate = n
-                task.defer(function() renderProperties(name) end) -- 延遲重建防衝突
+                -- ✅ 延遲重建，防止點擊事件衝突卡死
+                task.delay(0.2, function() renderProperties(name) end) 
             else
                 Notify("GunMod", "Save Failed", 3)
             end
@@ -372,8 +373,6 @@ local function BuildGunModded(A)
         local templates = GetTemplates()
         local isValid = false
         for _, v in ipairs(templates) do if v == SelectedTemplate then isValid = true break end end
-        
-        -- ✅ 核心修復：如果因為執行器 listfiles 抽風沒讀到剛存的模板，手動補進去，防止它重置為 None
         if not isValid and SelectedTemplate ~= "None" then
             table.insert(templates, SelectedTemplate)
         end
@@ -389,16 +388,19 @@ local function BuildGunModded(A)
                 local ok, count = ApplyTemplate(opt, setting)
                 if ok then
                     Notify("GunMod", "Applied: " .. opt, 3)
-                    -- 套用後立刻保存武器狀態
-                    local allData = GetWeaponSettings()
-                    if not allData[name] then allData[name] = {} end
-                    for k, v in pairs(setting) do
-                        if type(v) == "number" or type(v) == "boolean" or type(v) == "string" then
-                            allData[name][k] = v
+                    -- ✅ 後台異步保存配置，不卡主線程
+                    task.spawn(function()
+                        local allData = GetWeaponSettings()
+                        if not allData[name] then allData[name] = {} end
+                        for k, v in pairs(setting) do
+                            if type(v) == "number" or type(v) == "boolean" or type(v) == "string" then
+                                allData[name][k] = v
+                            end
                         end
-                    end
-                    pcall(function() writefile(W_SETTINGS, HttpService:JSONEncode(allData)) end)
-                    task.defer(function() renderProperties(name) end)
+                        pcall(function() writefile(W_SETTINGS, HttpService:JSONEncode(allData)) end)
+                    end)
+                    -- ✅ 延遲重建，讓下拉選單先完全收起
+                    task.delay(0.2, function() renderProperties(name) end)
                 end
             end
         end)
@@ -409,7 +411,8 @@ local function BuildGunModded(A)
                 if isfile(path) then pcall(function() delfile(path) end) end
                 Notify("GunMod", "Deleted: " .. SelectedTemplate, 3)
                 SelectedTemplate = "None"
-                task.defer(function() renderProperties(name) end)
+                -- ✅ 延遲重建
+                task.delay(0.2, function() renderProperties(name) end)
             else
                 Notify("GunMod", "No template selected", 3)
             end
@@ -418,10 +421,14 @@ local function BuildGunModded(A)
         A:Button("Reset to Initial", function()
             if LoadWeaponBackup(name, setting) then
                 Notify("GunMod", "Reset to initial backup", 3)
-                local allData = GetWeaponSettings()
-                allData[name] = {}
-                pcall(function() writefile(W_SETTINGS, HttpService:JSONEncode(allData)) end)
-                task.defer(function() renderProperties(name) end)
+                -- ✅ 後台異步保存配置
+                task.spawn(function()
+                    local allData = GetWeaponSettings()
+                    allData[name] = {}
+                    pcall(function() writefile(W_SETTINGS, HttpService:JSONEncode(allData)) end)
+                end)
+                -- ✅ 延遲重建
+                task.delay(0.2, function() renderProperties(name) end)
             else
                 Notify("GunMod", "No backup found", 3)
             end
