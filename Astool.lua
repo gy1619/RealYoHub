@@ -476,7 +476,8 @@ local function MakeToggle(parent, text, default, cb, register, group)
     return row
 end
 
-local function MakeSlider(parent, text, min, max, default, cb, group)
+local function MakeSlider(parent, text, min, max, default, cb, group, register)
+    if register == nil then register = true end
     local textW = math.max(S(92), EstW(text, TS(11)) + S(10))
     local rowW = math.max(S(252), textW + S(160))
     local row = AsFlow(parent).Add(rowW, S(30))
@@ -570,12 +571,14 @@ local function MakeSlider(parent, text, min, max, default, cb, group)
         end
     end)
     
-    RegisterSetting(text, "slider", function() return currentVal end, function(v)
-        v = tonumber(v) or default
-        if v > max then max = v end 
-        v = math.clamp(v, min, max)
-        setRatio((v - min) / (max - min), false)
-    end, group, default)
+    if register then 
+        RegisterSetting(text, "slider", function() return currentVal end, function(v)
+            v = tonumber(v) or default
+            if v > max then max = v end 
+            v = math.clamp(v, min, max)
+            setRatio((v - min) / (max - min), false)
+        end, group, default) 
+    end
 end
 
 local openDropdown = nil
@@ -587,9 +590,10 @@ UserInputService.InputBegan:Connect(function(inp)
     end
 end)
 
-local function MakeDropdown(parent, text, options, default, cb, group)
+local function MakeDropdown(parent, text, options, default, cb, group, register)
+    if register == nil then register = true end
     local row = AsFlow(parent).Add(S(150) + EstW(text, TS(12)) + S(16), S(30))
-    -- ✅ 修复：将死白底改为跟随主题的动态颜色
+    -- ✅ 修復白底：使用 AP.Comp 和 AP.Text 跟隨主題
     local btn = Create("TextButton", {
         Size = UDim2.fromOffset(S(150), S(26)), BackgroundColor3 = AP.Comp, BackgroundTransparency = AP.CompT,
         Text = tostring(default) .. " v", TextColor3 = AP.Text, TextSize = TS(12),
@@ -613,7 +617,7 @@ local function MakeDropdown(parent, text, options, default, cb, group)
     local handle = {}; local cur = default
     local function setValue(v, fire)
         cur = v
-        btn.Text = tostring(v) .. " v" -- ✅ 強制刷新文字
+        btn.Text = tostring(v) .. " v"
         if cb then cb(v) end
         if fire then TriggerAutoSave() end
     end
@@ -636,8 +640,7 @@ local function MakeDropdown(parent, text, options, default, cb, group)
     buildOptions(options)
     handle.Row = row
     function handle.SetOptions(opts) buildOptions(opts) end
-    function handle.Set(v) setValue(v, false) end -- ✅ 暴露強刷介面
-    
+    function handle.Set(v) setValue(v, false) end
     SafeClick(btn, function()
         if openDropdown == list then CloseDropdown() return end
         CloseDropdown()
@@ -645,7 +648,9 @@ local function MakeDropdown(parent, text, options, default, cb, group)
         list.Visible = true; openDropdown = list
     end)
     
-    RegisterSetting(text, "dropdown", function() return cur end, function(v) setValue(v, false) end, group, default)
+    if register then
+        RegisterSetting(text, "dropdown", function() return cur end, function(v) setValue(v, false) end, group, default)
+    end
     return handle
 end
 
@@ -1163,6 +1168,8 @@ function BridgeMeta:Create(comp)
     local text = comp.Text or comp.text or " "
     local cb = comp.Callback or comp.callback or comp.OnClick or comp.OnChange
     local group = comp.Group
+    local reg = comp.Register
+
     if kind == "Label" or kind == "Text" then
         return self.UI.MakeText(host, text, comp.Color or self.UI.COL.TextDark, comp.Size)
     elseif kind == "Section" then
@@ -1170,18 +1177,22 @@ function BridgeMeta:Create(comp)
     elseif kind == "Button" then
         return self.UI.MakeButton(host, text, cb)
     elseif kind == "Toggle" then
-        return self.UI.MakeToggle(host, text, comp.Default or false, cb, comp.Register, group)
+        return self.UI.MakeToggle(host, text, comp.Default or false, cb, reg, group)
     elseif kind == "Slider" then
-        return self.UI.MakeSlider(host, text, comp.Min or 0, comp.Max or 100, comp.Default or comp.Min or 0, cb, group)
+        return self.UI.MakeSlider(host, text, comp.Min or 0, comp.Max or 100, comp.Default or comp.Min or 0, cb, group, reg)
     elseif kind == "Dropdown" then
         local opts = comp.Options or {}
-        return self.UI.MakeDropdown(host, text, opts, comp.Default or opts[1], cb, group)
+        return self.UI.MakeDropdown(host, text, opts, comp.Default or opts[1], cb, group, reg)
     elseif kind == "TextBox" or kind == "Input" then
         return self.UI.MakeTextBox(host, comp.Placeholder or text, comp.Default or " ")
     elseif kind == "Grid" then
         return self:Grid()
     end
     return nil, "component_unknown: " .. tostring(kind)
+end
+function BridgeMeta:Dropdown(text, options, default, cb, opts) 
+    opts = opts or {}; 
+    return self:Create({ Type = "Dropdown", Text = text, Options = options, Default = default, Callback = cb, Host = opts.Host, Group = opts.Group, Register = opts.Register }) 
 end
 function BridgeMeta:Label(text, opts) opts = opts or {}; return self:Create({ Type = "Label", Text = text, Color = opts.Color, Size = opts.Size, Host = opts.Host }) end
 function BridgeMeta:Section(text, opts) opts = opts or {}; return self:Create({ Type = "Section", Text = text, Host = opts.Host }) end
