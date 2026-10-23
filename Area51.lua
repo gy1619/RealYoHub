@@ -1,5 +1,4 @@
 -- area51.lua | RealYoHub (RealYoUI GameBridge auto-handshake) | FIX-BUILD 1
-print(">>> [Area51] script loaded (FIX-BUILD 1) <<<")
 
 local GAME = { Name = "RealYoHub Area51", Brand = "RealYoUI" }
 local Players = game:GetService("Players")
@@ -358,13 +357,13 @@ local function BuildGunModded(A)
         local tplName = ""
         A:Input("Template Name", "Enter Name...", function(v) tplName = v end)
         
-        A:Button("Save / Overwrite Template", function()
+        A:Button("Save / Overwrite", function()
             local n = tplName:gsub("^%s+", ""):gsub("%s+$", "")
             if n == "" then Notify("GunMod", "Name required!", 3) return end
             if SaveTemplate(n, setting) then
                 Notify("GunMod", "Saved: " .. n, 3)
                 SelectedTemplate = n
-                renderProperties(name) -- 刷新 UI 顯示
+                task.defer(function() renderProperties(name) end) -- 延遲重建防衝突
             else
                 Notify("GunMod", "Save Failed", 3)
             end
@@ -373,7 +372,16 @@ local function BuildGunModded(A)
         local templates = GetTemplates()
         local isValid = false
         for _, v in ipairs(templates) do if v == SelectedTemplate then isValid = true break end end
-        if not isValid then SelectedTemplate = "None" end
+        
+        -- ✅ 核心修復：如果因為執行器 listfiles 抽風沒讀到剛存的模板，手動補進去，防止它重置為 None
+        if not isValid and SelectedTemplate ~= "None" then
+            table.insert(templates, SelectedTemplate)
+        end
+        table.sort(templates, function(a, b) 
+            if a == "None" then return true end
+            if b == "None" then return false end
+            return a < b 
+        end)
         
         local tplDrop = A:Dropdown("Select Template", templates, SelectedTemplate, function(opt)
             SelectedTemplate = opt
@@ -381,20 +389,27 @@ local function BuildGunModded(A)
                 local ok, count = ApplyTemplate(opt, setting)
                 if ok then
                     Notify("GunMod", "Applied: " .. opt, 3)
-                    renderProperties(name) -- 套用後刷新
-                else
-                    Notify("GunMod", "Failed to read template", 3)
+                    -- 套用後立刻保存武器狀態
+                    local allData = GetWeaponSettings()
+                    if not allData[name] then allData[name] = {} end
+                    for k, v in pairs(setting) do
+                        if type(v) == "number" or type(v) == "boolean" or type(v) == "string" then
+                            allData[name][k] = v
+                        end
+                    end
+                    pcall(function() writefile(W_SETTINGS, HttpService:JSONEncode(allData)) end)
+                    task.defer(function() renderProperties(name) end)
                 end
             end
         end)
         
-        A:Button("Delete Selected Template", function()
+        A:Button("Delete Selected", function()
             if SelectedTemplate ~= "None" then
                 local path = TEMPLATE_DIR .. "/" .. SelectedTemplate .. ".json"
                 if isfile(path) then pcall(function() delfile(path) end) end
                 Notify("GunMod", "Deleted: " .. SelectedTemplate, 3)
                 SelectedTemplate = "None"
-                renderProperties(name) -- 刪除後刷新
+                task.defer(function() renderProperties(name) end)
             else
                 Notify("GunMod", "No template selected", 3)
             end
@@ -406,7 +421,7 @@ local function BuildGunModded(A)
                 local allData = GetWeaponSettings()
                 allData[name] = {}
                 pcall(function() writefile(W_SETTINGS, HttpService:JSONEncode(allData)) end)
-                renderProperties(name)
+                task.defer(function() renderProperties(name) end)
             else
                 Notify("GunMod", "No backup found", 3)
             end
