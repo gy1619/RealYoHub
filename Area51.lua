@@ -116,6 +116,7 @@ local function BridgeAdapter(bridge)
 end
 
 -- ========== Gun Modded V2 ==========
+-- ========== Gun Modded V2 ==========
 local function BuildGunModded(A)
     local bridge = A._b
     local scrollHost = bridge.Host
@@ -125,9 +126,130 @@ local function BuildGunModded(A)
     local dynFrame = nil
     local dynGroup = nil
 
+    local HttpService = game:GetService("HttpService")
+    local CFG_DIR = "RealYo_Configs"
+    local BACKUP_DIR = CFG_DIR .. "/WeaponBackups"
+    local TEMPLATE_DIR = CFG_DIR .. "/WeaponTemplates"
+
+    pcall(function()
+        if type(makefolder) == "function" then
+            if not isfolder(CFG_DIR) then makefolder(CFG_DIR) end
+            if not isfolder(BACKUP_DIR) then makefolder(BACKUP_DIR) end
+            if not isfolder(TEMPLATE_DIR) then makefolder(TEMPLATE_DIR) end
+        end
+    end)
+
+    local function GetTemplates()
+        local list = {}
+        pcall(function()
+            if type(listfiles) == "function" then
+                for _, f in ipairs(listfiles(TEMPLATE_DIR)) do
+                    local name = tostring(f):match("([^/\\]+)%.json$")
+                    if name then table.insert(list, name) end
+                end
+            end
+        end)
+        return list
+    end
+
+    local function SaveTemplate(name, setting)
+        if type(writefile) ~= "function" then return false end
+        local data = {}
+        for k, v in pairs(setting) do
+            local t = type(v)
+            if t == "number" or t == "boolean" or t == "string" then
+                data[k] = v
+            end
+        end
+        local ok, json = pcall(function() return HttpService:JSONEncode(data) end)
+        if ok then
+            pcall(function() writefile(TEMPLATE_DIR .. "/" .. name .. ".json", json) end)
+            return true
+        end
+        return false
+    end
+
+    local function ApplyTemplate(name, setting)
+        if type(readfile) ~= "function" then return false, 0 end
+        local path = TEMPLATE_DIR .. "/" .. name .. ".json"
+        if not isfile(path) then return false, 0 end
+        local ok, raw = pcall(readfile, path)
+        if not ok or not raw then return false, 0 end
+        local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
+        if not ok2 or type(data) ~= "table" then return false, 0 end
+        local count = 0
+        for k, v in pairs(data) do
+            -- ✅ 跳過當前武器沒有的屬性
+            if setting[k] ~= nil then
+                local t = type(setting[k])
+                if t == "number" or t == "boolean" or t == "string" then
+                    setting[k] = v
+                    count = count + 1
+                end
+            end
+        end
+        return true, count
+    end
+
+    local function SaveWeaponBackup(name, setting)
+        if type(writefile) ~= "function" then return end
+        local data = {}
+        for k, v in pairs(setting) do
+            local t = type(v)
+            if t == "number" or t == "boolean" or t == "string" then
+                data[k] = v
+            end
+        end
+        local ok, encoded = pcall(function() return HttpService:JSONEncode(data) end)
+        if ok then
+            pcall(function() writefile(BACKUP_DIR .. "/" .. name .. ".json", encoded) end)
+        end
+    end
+
+    local function LoadWeaponBackup(name, setting)
+        if type(readfile) ~= "function" then return false end
+        local path = BACKUP_DIR .. "/" .. name .. ".json"
+        if not isfile(path) then return false end
+        local ok, raw = pcall(readfile, path)
+        if not ok or not raw then return false end
+        local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
+        if not ok2 or type(data) ~= "table" then return false end
+        for k, v in pairs(data) do
+            if setting[k] ~= nil then
+                setting[k] = v
+            end
+        end
+        return true
+    end
+
+    local function ClearWeaponBackup(name)
+        if type(delfile) ~= "function" then return end
+        local path = BACKUP_DIR .. "/" .. name .. ".json"
+        if isfile(path) then
+            pcall(function() delfile(path) end)
+        end
+    end
+
+    local function GetAutoSaveData()
+        local path = CFG_DIR .. "/autosave.json"
+        if type(isfile) == "function" and isfile(path) then
+            local ok, raw = pcall(readfile, path)
+            if ok and raw then
+                local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
+                if ok2 and type(data) == "table" then
+                    return data
+                end
+            end
+        end
+        return {}
+    end
+
     local function scanWeapons()
         weaponData = {}
         local list, seen = {}, {}
+        -- ✅ 讀取最新的自動保存數據，用於修復重生後配置重置
+        local savedData = GetAutoSaveData()
+        
         local function tryAdd(tool)
             if not (tool and tool:IsA("Tool")) then return end
             local cfg = tool:FindFirstChild("Setting")
@@ -136,6 +258,18 @@ local function BuildGunModded(A)
             table.insert(list, tool.Name)
             local ok, setting = pcall(require, cfg)
             if ok and type(setting) == "table" then
+                -- ✅ 如果存檔裡有這把武器，立刻覆蓋新實例的屬性
+                local wData = savedData[tool.Name]
+                if type(wData) == "table" then
+                    for k, v in pairs(wData) do
+                        if setting[k] ~= nil then
+                            local t = type(setting[k])
+                            if t == "number" or t == "boolean" or t == "string" then
+                                setting[k] = v
+                            end
+                        end
+                    end
+                end
                 weaponData[tool.Name] = setting
             end
         end
@@ -159,115 +293,162 @@ local function BuildGunModded(A)
     end
 
     local function renderProperties(name)
-    local setting = weaponData[name]
-    if not setting then Notify("GunMod", "cannot read " .. name .. " Setting", 3) return end
-    clearDyn()
-    dynGroup = name
-    dynFrame = Instance.new("Frame")
-    dynFrame.Name = "DynProps"
-    dynFrame.BackgroundTransparency = 1
-    dynFrame.Size = UDim2.new(1, 0, 0, 0)
-    dynFrame.AutomaticSize = Enum.AutomaticSize.Y
-    dynFrame.Parent = scrollHost
-    local lay = Instance.new("UIListLayout")
-    lay.Padding = UDim.new(0, 2)
-    lay.Parent = dynFrame
-
-    local oldHost = bridge.Host
-    bridge.Host = dynFrame
-
-    A:Section("Properties for " .. name)
-
-    -- 1. 定义主功能关键词列表（按你想要的排序优先级从上到下）
-    local CORE_ORDER = {
-        "BaseDamage", "FireRate", "BulletPerShot", "MaxClip", "AmmoPerClip", 
-        "Clips", "ReloadTime", "Auto", "BurstFireEnabled", "ShotgunEnabled", 
-        "ExplosiveEnabled", "SniperEnabled", "MinigunEnabled", "ChargedShotEnabled", 
-        "DualEnabled", "Piercing", "HeadshotDamageMultiplier", "Lifesteal", 
-        "Knockback", "Spread", "BulletSpeed", "FlamingBullet"
-    }
-    
-    local CORE_SET = {}
-    for i, k in ipairs(CORE_ORDER) do CORE_SET[k] = i end
-
-    -- 2. 定义拉黑名单（绝对不显示的纯视觉/动画垃圾）
-    local BLACKLIST = {
-        HitSoundIDs = true, BulletColor = true, BulletMaterial = true, 
-        BulletSize = true, MuzzleOffset = true, MouseIconID = true,
-        IdleAnimationID = true, FireAnimationID = true, ReloadAnimationID = true,
-        ShotgunClipinAnimationID = true, CameraShakingEnabled = true,
-        VisualizerEnabled = true, Intensity = true, FieldOfView = true,
-        BulletTransparency = true, FadeTime = true, MouseSensitive = true,
-        SpreadRedution = true, IdleAnimationSpeed = true, FireAnimationSpeed = true,
-        ReloadAnimationSpeed = true, ShellClipinSpeed = true, ShotgunClipinAnimationSpeed = true,
-        LimitedClipEnabled = true, DelayBeforeFiring = true, DelayAfterFiring = true, ChargingTime = true
-    }
-
-    -- 3. 分离主功能和进阶功能
-    local coreKeys, extraKeys = {}, {}
-    for k, v in pairs(setting) do 
-        if not BLACKLIST[k] and not k:find("Animation") and not k:find("Sound") then
-            if CORE_SET[k] then
-                table.insert(coreKeys, k)
-            else
-                table.insert(extraKeys, k)
-            end
-        end
-    end
-
-    -- 4. 排序
-    -- 主功能按照 CORE_ORDER 的顺序排
-    table.sort(coreKeys, function(a, b) return CORE_SET[a] < CORE_SET[b] end)
-    -- 进阶功能按字母顺序排
-    table.sort(extraKeys)
-
-    -- 5. 渲染辅助函数
-    local function renderKey(key)
-        local value = setting[key]
-        local t = type(value)
+        local setting = weaponData[name]
+        if not setting then Notify("GunMod", "cannot read " .. name .. " Setting", 3) return end
         
-        -- 处理 Desert Eagle 那种 table 类型（无限弹夹）
-        if t == "table" and type(value) == "table" then
-            if value.v == "inf" then
-                A:Label(key .. " = 无限 (Infinity)")
-            else
-                A:Label(key .. " = [Table]")
+        -- ✅ 確保有初始備份
+        if not isfile(BACKUP_DIR .. "/" .. name .. ".json") then
+            SaveWeaponBackup(name, setting)
+        end
+
+        clearDyn()
+        dynGroup = name
+        dynFrame = Instance.new("Frame")
+        dynFrame.Name = "DynProps"
+        dynFrame.BackgroundTransparency = 1
+        dynFrame.Size = UDim2.new(1, 0, 0, 0)
+        dynFrame.AutomaticSize = Enum.AutomaticSize.Y
+        dynFrame.Parent = scrollHost
+        local lay = Instance.new("UIListLayout")
+        lay.Padding = UDim.new(0, 2)
+        lay.Parent = dynFrame
+
+        local oldHost = bridge.Host
+        bridge.Host = dynFrame
+
+        A:Section("Templates & Backups")
+        local tplName = ""
+        A:Label("Template Name:")
+        A:Input("Template Name", "Input Name...", function(v) tplName = v end)
+        
+        local templates = GetTemplates()
+        if #templates == 0 then templates = {"No Templates"} end
+        local tplDrop = A:Dropdown("Apply Template", templates, "No Templates", function(opt)
+            if opt ~= "No Templates" then
+                local ok, count = ApplyTemplate(opt, setting)
+                if ok then
+                    Notify("GunMod", "Applied: " .. opt .. " (" .. count .. " items)", 3)
+                    renderProperties(name) -- 刷新 UI
+                else
+                    Notify("GunMod", "Failed to apply template", 3)
+                end
             end
-        elseif t == "boolean" then
-            A:Toggle(key, value, function(v) setting[key] = v end, name)
-        elseif t == "number" then
-            if key:match("ID$") or key:match("Id$") then
+        end)
+
+        A:Button("Save as Template", function()
+            local n = tplName
+            if n == "" then n = "Default" end
+            n = n:gsub("^%s+", ""):gsub("%s+$", "")
+            if SaveTemplate(n, setting) then
+                Notify("GunMod", "Saved Template: " .. n, 3)
+                tplDrop.SetOptions(GetTemplates())
+            else
+                Notify("GunMod", "Save Failed", 3)
+            end
+        end)
+
+        A:Button("Reset to Initial", function()
+            if LoadWeaponBackup(name, setting) then
+                Notify("GunMod", "Reset to initial backup", 3)
+                renderProperties(name) -- 瞬間刷新 UI
+            else
+                Notify("GunMod", "No backup found", 3)
+            end
+        end)
+        A:Button("Clear Backup", function()
+            ClearWeaponBackup(name)
+            Notify("GunMod", "Backup cleared", 3)
+        end)
+
+        A:Section("Properties for " .. name)
+
+        -- 1. 定义主功能关键词列表（按你想要的排序优先级从上到下）
+        local CORE_ORDER = {
+            "BaseDamage", "FireRate", "BulletPerShot", "MaxClip", "AmmoPerClip", 
+            "Clips", "ReloadTime", "Auto", "BurstFireEnabled", "ShotgunEnabled", 
+            "ExplosiveEnabled", "SniperEnabled", "MinigunEnabled", "ChargedShotEnabled", 
+            "DualEnabled", "Piercing", "HeadshotDamageMultiplier", "Lifesteal", 
+            "Knockback", "Spread", "BulletSpeed", "FlamingBullet"
+        }
+        
+        local CORE_SET = {}
+        for i, k in ipairs(CORE_ORDER) do CORE_SET[k] = i end
+
+        -- 2. 定义拉黑名单（绝对不显示的纯视觉/动画垃圾）
+        local BLACKLIST = {
+            HitSoundIDs = true, BulletColor = true, BulletMaterial = true, 
+            BulletSize = true, MuzzleOffset = true, MouseIconID = true,
+            IdleAnimationID = true, FireAnimationID = true, ReloadAnimationID = true,
+            ShotgunClipinAnimationID = true, CameraShakingEnabled = true,
+            VisualizerEnabled = true, Intensity = true, FieldOfView = true,
+            BulletTransparency = true, FadeTime = true, MouseSensitive = true,
+            SpreadRedution = true, IdleAnimationSpeed = true, FireAnimationSpeed = true,
+            ReloadAnimationSpeed = true, ShellClipinSpeed = true, ShotgunClipinAnimationSpeed = true,
+            LimitedClipEnabled = true, DelayBeforeFiring = true, DelayAfterFiring = true, ChargingTime = true
+        }
+
+        -- 3. 分离主功能和进阶功能
+        local coreKeys, extraKeys = {}, {}
+        for k, v in pairs(setting) do 
+            if not BLACKLIST[k] and not k:find("Animation") and not k:find("Sound") then
+                if CORE_SET[k] then
+                    table.insert(coreKeys, k)
+                else
+                    table.insert(extraKeys, k)
+                end
+            end
+        end
+
+        -- 4. 排序
+        table.sort(coreKeys, function(a, b) return CORE_SET[a] < CORE_SET[b] end)
+        table.sort(extraKeys)
+
+        -- 5. 渲染辅助函数
+        local function renderKey(key)
+            local value = setting[key]
+            local t = type(value)
+            
+            if t == "table" and type(value) == "table" then
+                if value.v == "inf" then
+                    A:Label(key .. " = 无限 (Infinity)")
+                else
+                    A:Label(key .. " = [Table]")
+                end
+            elseif t == "boolean" then
+                A:Toggle(key, value, function(v) setting[key] = v end, name)
+            elseif t == "number" then
+                if key:match("ID$") or key:match("Id$") then
+                    A:Label(key .. " = " .. tostring(value))
+                elseif value == math.floor(value) then
+                    A:Slider(key, 0, 500, value, function(v) setting[key] = v end, name)
+                else
+                    local v100 = math.floor(value * 100 + 0.5)
+                    A:Slider(key .. " (x0.01)", 0, 500, v100, function(v) setting[key] = v / 100 end, name)
+                end
+            elseif t == "string" then
                 A:Label(key .. " = " .. tostring(value))
-            elseif value == math.floor(value) then
-                A:Slider(key, 0, 500, value, function(v) setting[key] = v end, name)
-            else
-                local v100 = math.floor(value * 100 + 0.5)
-                A:Slider(key .. " (x0.01)", 0, 500, v100, function(v) setting[key] = v / 100 end, name)
             end
-        elseif t == "string" then
-            A:Label(key .. " = " .. tostring(value))
         end
-    end
 
-    -- 6. 绘制主功能
-    if #coreKeys > 0 then
-        A:Label("--- Main ---")
-        for _, key in ipairs(coreKeys) do
-            renderKey(key)
+        -- 6. 绘制主功能
+        if #coreKeys > 0 then
+            A:Label("--- Main ---")
+            for _, key in ipairs(coreKeys) do
+                renderKey(key)
+            end
         end
-    end
 
-    -- 7. 绘制进阶功能
-    if #extraKeys > 0 then
-        A:Label("--- Advanced ---")
-        for _, key in ipairs(extraKeys) do
-            renderKey(key)
+        -- 7. 绘制进阶功能
+        if #extraKeys > 0 then
+            A:Label("--- Advanced ---")
+            for _, key in ipairs(extraKeys) do
+                renderKey(key)
+            end
         end
+        
+        bridge.Host = oldHost
+        Notify("GunMod", "Loaded " .. name .. " (" .. #coreKeys + #extraKeys .. " items)", 3)
     end
-    
-    bridge.Host = oldHost
-    Notify("GunMod", "Loaded " .. name .. " (" .. #coreKeys + #extraKeys .. " items)", 3)
-end
 
     local function rescan()
         local list = scanWeapons()
@@ -292,7 +473,7 @@ end
     end
     watchContainer(LocalPlayer.Backpack)
     if LocalPlayer.Character then watchContainer(LocalPlayer.Character) end
-    LocalPlayer.CharacterAdded:Connect(function(ch) watchContainer(ch)end)
+    LocalPlayer.CharacterAdded:Connect(function(ch) watchContainer(ch) end)
 
     A:Section("Weapon Scanner")
     local list = rescan()
@@ -307,7 +488,6 @@ end
         function(selected) renderProperties(selected) end)
     A:Section("Instructions")
     A:Label("Select a weapon above to mod it.")
-    A:Label("Settings are saved per weapon in Config.")
 end
 
 -- ========== Area 51 ==========
@@ -714,7 +894,7 @@ end
 if Runtime.Mode == "Host" and DefCheck() then
     local bridge = Runtime.Bridge
     SafeCall("Build Area51", function() bridge:UsePageIndex(1, 1, "Replace"); BuildArea51(BridgeAdapter(bridge)) end)
-    SafeCall("Build GunModded", function() bridge:UsePageIndex(1, 2, "Replace"); BuildGunModded(BridgeAdapter(bridge)) end)
+    SafeCall("Build GunModded", function() bridge:UsePageIndex(1, 2, "Replace"); dedded(BridgeAdapter(bridge)) end)
     SafeCall("Build Teleport", function() bridge:UsePageIndex(1, 3, "Replace"); BuildTeleport(BridgeAdapter(bridge)) end)
     SafeCall("Build FETools", function() bridge:UsePageIndex(1, 4, "Replace"); BuildFETools(BridgeAdapter(bridge)) end)
     SafeCall("Focus", function() bridge:Focus() end)
