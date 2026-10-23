@@ -118,6 +118,7 @@ end
 -- ========== Gun Modded V2 ==========
 -- ========== Gun Modded V2 ==========
 -- ========== Gun Modded V2 ==========
+-- ========== Gun Modded V2 ==========
 local function BuildGunModded(A)
     local bridge = A._b
     local scrollHost = bridge.Host
@@ -126,11 +127,13 @@ local function BuildGunModded(A)
     local lastSig = nil
     local dynFrame = nil
     local dynGroup = nil
+    local SelectedTemplate = "None"
 
     local HttpService = game:GetService("HttpService")
     local CFG_DIR = "RealYo_Configs"
     local BACKUP_DIR = CFG_DIR .. "/WeaponBackups"
     local TEMPLATE_DIR = CFG_DIR .. "/WeaponTemplates"
+    local W_SETTINGS = CFG_DIR .. "/WeaponSettings.json" -- ✅ 武器實時配置儲存點
 
     pcall(function()
         if type(makefolder) == "function" then
@@ -140,7 +143,7 @@ local function BuildGunModded(A)
         end
     end)
 
-    -- Anti-Ghost Sync Fix: Force network ownership refresh to fix desync caused by high fire rate flood
+    -- 防幽靈
     task.spawn(function()
         while task.wait(1) do
             local char = LocalPlayer.Character
@@ -163,8 +166,27 @@ local function BuildGunModded(A)
         end
     end)
 
+    local function GetWeaponSettings()
+        if type(isfile) == "function" and isfile(W_SETTINGS) then
+            local ok, raw = pcall(readfile, W_SETTINGS)
+            if ok and raw then
+                local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
+                if ok2 and type(data) == "table" then return data end
+            end
+        end
+        return {}
+    end
+
+    local function SaveWeaponSetting(wName, key, val)
+        if type(writefile) ~= "function" then return end
+        local allData = GetWeaponSettings()
+        if not allData[wName] then allData[wName] = {} end
+        allData[wName][key] = val
+        pcall(function() writefile(W_SETTINGS, HttpService:JSONEncode(allData)) end)
+    end
+
     local function GetTemplates()
-        local list = {}
+        local list = {"None"}
         pcall(function()
             if type(listfiles) == "function" then
                 for _, f in ipairs(listfiles(TEMPLATE_DIR)) do
@@ -181,9 +203,7 @@ local function BuildGunModded(A)
         local data = {}
         for k, v in pairs(setting) do
             local t = type(v)
-            if t == "number" or t == "boolean" or t == "string" then
-                data[k] = v
-            end
+            if t == "number" or t == "boolean" or t == "string" then data[k] = v end
         end
         local ok, json = pcall(function() return HttpService:JSONEncode(data) end)
         if ok then
@@ -194,7 +214,7 @@ local function BuildGunModded(A)
     end
 
     local function ApplyTemplate(name, setting)
-        if type(readfile) ~= "function" then return false, 0 end
+        if name == "None" or type(readfile) ~= "function" then return false, 0 end
         local path = TEMPLATE_DIR .. "/" .. name .. ".json"
         if not isfile(path) then return false, 0 end
         local ok, raw = pcall(readfile, path)
@@ -203,7 +223,6 @@ local function BuildGunModded(A)
         if not ok2 or type(data) ~= "table" then return false, 0 end
         local count = 0
         for k, v in pairs(data) do
-            -- Skip properties that do not exist on the current weapon
             if setting[k] ~= nil then
                 local t = type(setting[k])
                 if t == "number" or t == "boolean" or t == "string" then
@@ -220,14 +239,10 @@ local function BuildGunModded(A)
         local data = {}
         for k, v in pairs(setting) do
             local t = type(v)
-            if t == "number" or t == "boolean" or t == "string" then
-                data[k] = v
-            end
+            if t == "number" or t == "boolean" or t == "string" then data[k] = v end
         end
         local ok, encoded = pcall(function() return HttpService:JSONEncode(data) end)
-        if ok then
-            pcall(function() writefile(BACKUP_DIR .. "/" .. name .. ".json", encoded) end)
-        end
+        if ok then pcall(function() writefile(BACKUP_DIR .. "/" .. name .. ".json", encoded) end) end
     end
 
     local function LoadWeaponBackup(name, setting)
@@ -239,9 +254,7 @@ local function BuildGunModded(A)
         local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
         if not ok2 or type(data) ~= "table" then return false end
         for k, v in pairs(data) do
-            if setting[k] ~= nil then
-                setting[k] = v
-            end
+            if setting[k] ~= nil then setting[k] = v end
         end
         return true
     end
@@ -249,29 +262,13 @@ local function BuildGunModded(A)
     local function ClearWeaponBackup(name)
         if type(delfile) ~= "function" then return end
         local path = BACKUP_DIR .. "/" .. name .. ".json"
-        if isfile(path) then
-            pcall(function() delfile(path) end)
-        end
-    end
-
-    local function GetAutoSaveData()
-        local path = CFG_DIR .. "/autosave.json"
-        if type(isfile) == "function" and isfile(path) then
-            local ok, raw = pcall(readfile, path)
-            if ok and raw then
-                local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
-                if ok2 and type(data) == "table" then
-                    return data
-                end
-            end
-        end
-        return {}
+        if isfile(path) then pcall(function() delfile(path) end) end
     end
 
     local function scanWeapons()
         weaponData = {}
         local list, seen = {}, {}
-        local savedData = GetAutoSaveData()
+        local wSettings = GetWeaponSettings() -- ✅ 加載實時武器設定
         
         local function tryAdd(tool)
             if not (tool and tool:IsA("Tool")) then return end
@@ -281,10 +278,10 @@ local function BuildGunModded(A)
             table.insert(list, tool.Name)
             local ok, setting = pcall(require, cfg)
             if ok and type(setting) == "table" then
-                -- Apply saved data to the new weapon instance
-                local wData = savedData[tool.Name]
-                if type(wData) == "table" then
-                    for k, v in pairs(wData) do
+                -- ✅ 覆蓋實時保存的屬性，確保重生後不丟失
+                local saved = wSettings[tool.Name]
+                if type(saved) == "table" then
+                    for k, v in pairs(saved) do
                         if setting[k] ~= nil then
                             local t = type(setting[k])
                             if t == "number" or t == "boolean" or t == "string" then
@@ -304,6 +301,26 @@ local function BuildGunModded(A)
         check(LocalPlayer.Character)
         return list
     end
+
+    -- ✅ 後台強制鎖定當前武器面板的配置，防服務器偷改
+    task.spawn(function()
+        while task.wait(1) do
+            if dynGroup and weaponData[dynGroup] then
+                local setting = weaponData[dynGroup]
+                local wSettings = GetWeaponSettings()[dynGroup]
+                if type(wSettings) == "table" then
+                    for k, v in pairs(wSettings) do
+                        if setting[k] ~= nil and setting[k] ~= v then
+                            local t = type(setting[k])
+                            if t == "number" or t == "boolean" or t == "string" then
+                                setting[k] = v
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
 
     local function clearDyn()
         if dynFrame then pcall(function() dynFrame:Destroy() end) dynFrame = nil end
@@ -339,39 +356,68 @@ local function BuildGunModded(A)
         bridge.Host = dynFrame
 
         A:Section("Templates & Backups")
-        local tplName = ""
-        A:Label("Template Name:")
-        A:Input("Template Name", "Input Name...", function(v) tplName = v end)
         
-        local templates = GetTemplates()
-        if #templates == 0 then templates = {"No Templates"} end
-        local tplDrop = A:Dropdown("Apply Template", templates, "No Templates", function(opt)
-            if opt ~= "No Templates" then
-                local ok, count = ApplyTemplate(opt, setting)
-                if ok then
-                    Notify("GunMod", "Applied: " .. opt .. " (" .. count .. " items)", 3)
-                    renderProperties(name)
-                else
-                    Notify("GunMod", "Failed to apply template", 3)
-                end
-            end
-        end)
-
-        A:Button("Save as Template", function()
+        local tplName = ""
+        A:Input("Template Name", "New Template Name...", function(v) tplName = v end)
+        
+        A:Button("Save as New Template", function()
             local n = tplName
             if n == "" then n = "Default" end
             n = n:gsub("^%s+", ""):gsub("%s+$", "")
             if SaveTemplate(n, setting) then
-                Notify("GunMod", "Saved Template: " .. n, 3)
-                tplDrop.SetOptions(GetTemplates())
+                Notify("GunMod", "Saved New Template: " .. n, 3)
+                SelectedTemplate = n
+                renderProperties(name) -- 刷新 UI
             else
                 Notify("GunMod", "Save Failed", 3)
+            end
+        end)
+
+        local templates = GetTemplates()
+        local isValid = false
+        for _, v in ipairs(templates) do if v == SelectedTemplate then isValid = true break end end
+        if not isValid then SelectedTemplate = "None" end
+
+        local tplDrop = A:Dropdown("Apply Template", templates, SelectedTemplate, function(opt)
+            if opt ~= "None" then
+                local ok, count = ApplyTemplate(opt, setting)
+                if ok then
+                    Notify("GunMod", "Applied: " .. opt .. " (" .. count .. " items)", 3)
+                    SelectedTemplate = opt
+                    -- ✅ 套用模板後，同步寫入實時設定
+                    local allData = GetWeaponSettings()
+                    if not allData[name] then allData[name] = {} end
+                    for k, v in pairs(setting) do
+                        if type(v) == "number" or type(v) == "boolean" or type(v) == "string" then
+                            allData[name][k] = v
+                        end
+                    end
+                    pcall(function() writefile(W_SETTINGS, HttpService:JSONEncode(allData)) end)
+                    renderProperties(name) 
+                end
+            else
+                SelectedTemplate = "None"
+            end
+        end)
+
+        A:Button("Overwrite Selected Template", function()
+            if SelectedTemplate ~= "None" then
+                if SaveTemplate(SelectedTemplate, setting) then
+                    Notify("GunMod", "Overwritten Template: " .. SelectedTemplate, 3)
+                else
+                    Notify("GunMod", "Overwrite Failed", 3)
+                end
+            else
+                Notify("GunMod", "No template selected", 3)
             end
         end)
 
         A:Button("Reset to Initial", function()
             if LoadWeaponBackup(name, setting) then
                 Notify("GunMod", "Reset to initial backup", 3)
+                local allData = GetWeaponSettings()
+                allData[name] = {} -- 清空實時設定
+                pcall(function() writefile(W_SETTINGS, HttpService:JSONEncode(allData)) end)
                 renderProperties(name)
             else
                 Notify("GunMod", "No backup found", 3)
@@ -391,7 +437,6 @@ local function BuildGunModded(A)
             "DualEnabled", "Piercing", "HeadshotDamageMultiplier", "Lifesteal", 
             "Knockback", "Spread", "BulletSpeed", "FlamingBullet"
         }
-        
         local CORE_SET = {}
         for i, k in ipairs(CORE_ORDER) do CORE_SET[k] = i end
 
@@ -410,14 +455,9 @@ local function BuildGunModded(A)
         local coreKeys, extraKeys = {}, {}
         for k, v in pairs(setting) do 
             if not BLACKLIST[k] and not k:find("Animation") and not k:find("Sound") then
-                if CORE_SET[k] then
-                    table.insert(coreKeys, k)
-                else
-                    table.insert(extraKeys, k)
-                end
+                if CORE_SET[k] then table.insert(coreKeys, k) else table.insert(extraKeys, k) end
             end
         end
-
         table.sort(coreKeys, function(a, b) return CORE_SET[a] < CORE_SET[b] end)
         table.sort(extraKeys)
 
@@ -425,22 +465,28 @@ local function BuildGunModded(A)
             local value = setting[key]
             local t = type(value)
             
+            -- ✅ 核心修改：修改後立刻持久化保存到 WeaponSettings.json
             if t == "table" and type(value) == "table" then
-                if value.v == "inf" then
-                    A:Label(key .. " = Infinity")
-                else
-                    A:Label(key .. " = [Table]")
-                end
+                if value.v == "inf" then A:Label(key .. " = Infinity") else A:Label(key .. " = [Table]") end
             elseif t == "boolean" then
-                A:Toggle(key, value, function(v) setting[key] = v end, name)
+                A:Toggle(key, value, function(v) 
+                    setting[key] = v 
+                    SaveWeaponSetting(name, key, v)
+                end, name)
             elseif t == "number" then
                 if key:match("ID$") or key:match("Id$") then
                     A:Label(key .. " = " .. tostring(value))
                 elseif value == math.floor(value) then
-                    A:Slider(key, 0, 500, value, function(v) setting[key] = v end, name)
+                    A:Slider(key, 0, 500, value, function(v) 
+                        setting[key] = v 
+                        SaveWeaponSetting(name, key, v)
+                    end, name)
                 else
                     local v100 = math.floor(value * 100 + 0.5)
-                    A:Slider(key .. " (x0.01)", 0, 500, v100, function(v) setting[key] = v / 100 end, name)
+                    A:Slider(key .. " (x0.01)", 0, 500, v100, function(v) 
+                        setting[key] = v / 100 
+                        SaveWeaponSetting(name, key, v / 100)
+                    end, name)
                 end
             elseif t == "string" then
                 A:Label(key .. " = " .. tostring(value))
@@ -449,16 +495,11 @@ local function BuildGunModded(A)
 
         if #coreKeys > 0 then
             A:Label("--- Main ---")
-            for _, key in ipairs(coreKeys) do
-                renderKey(key)
-            end
+            for _, key in ipairs(coreKeys) do renderKey(key) end
         end
-
         if #extraKeys > 0 then
             A:Label("--- Advanced ---")
-            for _, key in ipairs(extraKeys) do
-                renderKey(key)
-            end
+            for _, key in ipairs(extraKeys) do renderKey(key) end
         end
         
         bridge.Host = oldHost
@@ -488,7 +529,15 @@ local function BuildGunModded(A)
     end
     watchContainer(LocalPlayer.Backpack)
     if LocalPlayer.Character then watchContainer(LocalPlayer.Character) end
-    LocalPlayer.CharacterAdded:Connect(function(ch) watchContainer(ch) end)
+    
+    LocalPlayer.CharacterAdded:Connect(function(ch) 
+        task.wait(1)
+        watchContainer(ch) 
+        rescan()
+        if dynGroup and weaponData[dynGroup] then
+            renderProperties(dynGroup) 
+        end
+    end)
 
     A:Section("Weapon Scanner")
     local list = rescan()
@@ -500,7 +549,10 @@ local function BuildGunModded(A)
     weaponDrop = A:Dropdown("Choose Weapon",
         (#list > 0) and list or { "No weapons" },
         (#list > 0) and list[1] or "No weapons",
-        function(selected) renderProperties(selected) end)
+        function(selected) 
+            SelectedTemplate = "None" -- 切換武器重置模板狀態
+            renderProperties(selected) 
+        end)
     A:Section("Instructions")
     A:Label("Select a weapon above to mod it.")
 end
