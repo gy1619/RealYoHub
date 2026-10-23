@@ -450,8 +450,6 @@ local function MakeToggle(parent, text, default, cb, register, group)
         BackgroundColor3 = state and AP.Accent or offColor, Parent = row,
     })
     AddCorner(box, S(3))
-    
-    -- ✅ 抛弃 role，改用独有标记，这样换主题时就不会被错误刷新成强调色
     box:SetAttribute("IsToggle", true)
     box:SetAttribute("ToggleState", state)
     
@@ -466,14 +464,19 @@ local function MakeToggle(parent, text, default, cb, register, group)
         if v == state then return end
         state = v
         box.BackgroundColor3 = state and AP.Accent or offColor
-        box:SetAttribute("ToggleState", state) -- 同步状态
+        box:SetAttribute("ToggleState", state)
         if cb then cb(state) end
         if fire then TriggerAutoSave() end
     end
     SafeClick(row, function() apply(not state, true) end)
     
-    if register then RegisterSetting(text, "toggle", function() return state end, function(v) apply(v, false) end, group, default) end
-    return row
+    -- ✅ 返回 Handle 供外部原地修改
+    local handle = {}
+    handle.Set = function(v) apply(v, false) end
+    handle.Get = function() return state end
+    
+    if register then RegisterSetting(text, "toggle", handle.Get, handle.Set, group, default) end
+    return handle
 end
 
 local function MakeSlider(parent, text, min, max, default, cb, group, register)
@@ -571,24 +574,21 @@ local function MakeSlider(parent, text, min, max, default, cb, group, register)
         end
     end)
     
-    if register then 
-        RegisterSetting(text, "slider", function() return currentVal end, function(v)
-            v = tonumber(v) or default
-            if v > max then max = v end 
-            v = math.clamp(v, min, max)
-            setRatio((v - min) / (max - min), false)
-        end, group, default) 
+    -- ✅ 返回 Handle 供外部原地修改
+    local handle = {}
+    handle.Set = function(v)
+        v = tonumber(v) or default
+        if v > max then max = v end 
+        v = math.clamp(v, min, max)
+        setRatio((v - min) / (max - min), false)
     end
-end
+    handle.Get = function() return currentVal end
 
-local openDropdown = nil
-local function CloseDropdown() if openDropdown then openDropdown.Visible = false; openDropdown = nil end end
-UserInputService.InputBegan:Connect(function(inp)
-    if openDropdown and (inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch) then
-        local p = inp.Position; local lp = openDropdown.AbsolutePosition; local ls = openDropdown.AbsoluteSize
-        if p.X < lp.X or p.X > lp.X + ls.X or p.Y < lp.Y or p.Y > lp.Y + ls.Y then CloseDropdown() end
+    if register then 
+        RegisterSetting(text, "slider", handle.Get, handle.Set, group, default) 
     end
-end)
+    return handle
+end
 
 local function MakeDropdown(parent, text, options, default, cb, group, register)
     if register == nil then register = true end
