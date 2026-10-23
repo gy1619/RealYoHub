@@ -645,8 +645,6 @@ end)
 end
 
 -- ========== Area 51 ==========
--- ========== Area 51 ==========
--- ========== Area 51 ==========
 local function BuildArea51(A)
     local speedHackEnabled = false
     local speedHackConn = nil
@@ -656,7 +654,6 @@ local function BuildArea51(A)
     local flyConn = nil
     local flyBP = nil
 
-    -- ✅ 重構 Speed Hack：修復死後重置的問題
     local function applySpeedHack(character)
         if speedHackConn then speedHackConn:Disconnect() speedHackConn = nil end
         if not speedHackEnabled or not character then return end
@@ -692,7 +689,6 @@ local function BuildArea51(A)
         applySpeedHack(LocalPlayer.Character)
     end)
 
-    -- ✅ 重構 Fly Height：改為滑條並修復記憶體洩漏
     local function updateFlyHeight(character)
         if flyConn then flyConn:Disconnect() flyConn = nil end
         if flyBP then flyBP:Destroy() flyBP = nil end
@@ -730,7 +726,6 @@ local function BuildArea51(A)
         updateFlyHeight(LocalPlayer.Character)
     end)
 
-    -- ✅ 統一在這裡處理重生
     LocalPlayer.CharacterAdded:Connect(function(char)
         task.wait(1)
         applySpeedHack(char)
@@ -779,7 +774,6 @@ local function BuildArea51(A)
     AddWeaponButton("Vulcan", Vector3.new(625.76, 1127.85, 749.51), Vector3.new(-600.846, 950.275, 154.955))
     AddWeaponButton("Ice Crossbow", Vector3.new(625.76, 1127.85, 749.51), Vector3.new(243.564, 687.29, 943.856))
 
-    -- ✅ 終極版自動領取：支持會彈跳的 Ball，動態追蹤強制視角
     A:Toggle("Auto Supply Crate", false, function(state)
         if not state then
             if _G.RealSupplyLoop then _G.RealSupplyLoop = false end
@@ -823,16 +817,16 @@ local function BuildArea51(A)
                     if #supplies == 0 then return end
                     
                     for _, supply in ipairs(supplies) do
-                        -- 跳過黑名單座標（原本的出生點）
                         if (supply.Position - Vector3.new(-816, 5181, 493)).Magnitude > 5
                         and (supply.Position - Vector3.new(-816, 5181, 630)).Magnitude > 5
                         and (supply.Position - Vector3.new(-816, 5181, 376)).Magnitude > 5 then
                             
-                            -- 🛑 1. 中轉到你當前位置（過檢查點）
-                            root.CFrame = lastMovingPos
+                            -- 1. 回大廳安全點（Checkpoint，防封號）
+                            local safePoint = CFrame.new(625.76, 1127.85, 749.51)
+                            root.CFrame = safePoint
                             task.wait(1.5)
                             
-                            -- 🛡️ 2. 關閉碰撞
+                            -- 2. 關閉碰撞準備瞬移
                             for _, p in ipairs(char:GetDescendants()) do
                                 if p:IsA("BasePart") then p.CanCollide = false end
                             end
@@ -841,16 +835,13 @@ local function BuildArea51(A)
                             local oldCamType = cam.CameraType
                             cam.CameraType = Enum.CameraType.Scriptable
                             
-                            -- ⚡ 3. 高頻懸空鎖定（針對球會彈跳的特性動態追蹤）
+                            -- 3. 高頻懸空追蹤拿取
                             local startTime = tick()
                             while tick() - startTime < 1.0 do
-                                if not supply.Parent then break end -- 如果盒子被拿走了就提早結束
+                                if not supply.Parent then break end
                                 
-                                -- 實時獲取當前座標（球會動）
                                 local targetPos = supply.Position + Vector3.new(0, -10, 0)
                                 root.CFrame = CFrame.new(targetPos)
-                                
-                                -- 📷 強制相機與角色朝向對準目標
                                 cam.CFrame = CFrame.new(targetPos, supply.Position) 
                                 root.CFrame = CFrame.new(targetPos, supply.Position) 
                                 
@@ -861,10 +852,10 @@ local function BuildArea51(A)
                                         fireproximityprompt(desc)
                                     end
                                 end
-                                task.wait(0.03) -- 極高刷新率，球彈到哪跟到哪
+                                task.wait(0.03)
                             end
                             
-                            -- 🔄 4. 恢復相機與碰撞，拉回原位
+                            -- 4. 恢復相機、碰撞，直接傳回原本打怪的位置
                             cam.CameraType = oldCamType
                             root.CFrame = lastMovingPos
                             for _, p in ipairs(char:GetDescendants()) do
