@@ -505,7 +505,7 @@ local function BuildGunModded(A)
 
         local CORE_ORDER = {
             "BaseDamage", "FireRate", "BulletPerShot", "MaxClip", "AmmoPerClip", 
-            "Clips", "ReloadTime", "Auto", "BurstFireEnabled", "ShotgunEnabled", 
+            "Clips", "ReloadTime", "Auto", "CameraShakingEnabled", "BurstFireEnabled", "ShotgunEnabled", 
             "ExplosiveEnabled", "SniperEnabled", "MinigunEnabled", "ChargedShotEnabled", 
             "DualEnabled", "Piercing", "HeadshotDamageMultiplier", "Lifesteal", 
             "Knockback", "Spread", "BulletSpeed", "FlamingBullet"
@@ -517,8 +517,7 @@ local function BuildGunModded(A)
             HitSoundIDs = true, BulletColor = true, BulletMaterial = true, 
             BulletSize = true, MuzzleOffset = true, MouseIconID = true,
             IdleAnimationID = true, FireAnimationID = true, ReloadAnimationID = true,
-            ShotgunClipinAnimationID = true, CameraShakingEnabled = true,
-            VisualizerEnabled = true, Intensity = true, FieldOfView = true,
+            ShotgunClipinAnimationID = true, VisualizerEnabled = true, Intensity = true, FieldOfView = true,
             BulletTransparency = true, FadeTime = true, MouseSensitive = true,
             SpreadRedution = true, IdleAnimationSpeed = true, FireAnimationSpeed = true,
             ReloadAnimationSpeed = true, ShellClipinSpeed = true, ShotgunClipinAnimationSpeed = true,
@@ -630,84 +629,96 @@ local function BuildGunModded(A)
 end
 
 -- ========== Area 51 ==========
+-- ========== Area 51 ==========
 local function BuildArea51(A)
-    local speedHackConnection = nil
+    local speedHackEnabled = false
+    local speedHackConn = nil
     local farmConn = nil
+    
+    local flyHeight = 0
+    local flyConn = nil
+    local flyBP = nil
 
-    A:Toggle("Speed Hack", false, function(v)
-        pcall(function()
-            local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-            local humanoid = char:WaitForChild("Humanoid")
-            local root = char:WaitForChild("HumanoidRootPart")
-            local teleportDistance = 1.5
-            local teleportInterval = 0.01
-            local lastTeleportTime = 0
-            local rayParams = RaycastParams.new()
-            rayParams.FilterDescendantsInstances = { char }
-            rayParams.FilterType = Enum.RaycastFilterType.Exclude
-            if v then
-                speedHackConnection = RunService.Heartbeat:Connect(function()
-                    if tick() - lastTeleportTime < teleportInterval then return end
-                    local moveDir = humanoid.MoveDirection
-                    if moveDir.Magnitude > 0 then
-                        local teleportVector = moveDir * teleportDistance
-                        local result = Workspace:Raycast(root.Position, teleportVector, rayParams)
-                        if not result or result.Distance > teleportDistance then
-                            root.CFrame = root.CFrame + Vector3.new(teleportVector.X, 0, teleportVector.Z)
-                        end
-                        lastTeleportTime = tick()
-                    end
-                end)
-            else
-                if speedHackConnection then speedHackConnection:Disconnect() speedHackConnection = nil end
+    -- ✅ 重構 Speed Hack：修復死後重置的問題
+    local function applySpeedHack(character)
+        if speedHackConn then speedHackConn:Disconnect() speedHackConn = nil end
+        if not speedHackEnabled or not character then return end
+
+        local humanoid = character:WaitForChild("Humanoid", 3)
+        local root = character:WaitForChild("HumanoidRootPart", 3)
+        if not humanoid or not root then return end
+
+        local teleportDistance = 1.5
+        local teleportInterval = 0.01
+        local lastTeleportTime = 0
+        local rayParams = RaycastParams.new()
+        rayParams.FilterDescendantsInstances = { character }
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+        speedHackConn = RunService.Heartbeat:Connect(function()
+            if not root or not root.Parent or not humanoid or humanoid.Health <= 0 then return end
+            if tick() - lastTeleportTime < teleportInterval then return end
+            local moveDir = humanoid.MoveDirection
+            if moveDir.Magnitude > 0 then
+                local teleportVector = moveDir * teleportDistance
+                local result = Workspace:Raycast(root.Position, teleportVector, rayParams)
+                if not result or result.Distance > teleportDistance then
+                    root.CFrame = root.CFrame + Vector3.new(teleportVector.X, 0, teleportVector.Z)
+                end
+                lastTeleportTime = tick()
             end
         end)
+    end
+
+    A:Toggle("Speed Hack", false, function(v)
+        speedHackEnabled = v
+        applySpeedHack(LocalPlayer.Character)
     end)
 
-    A:Input("Fly Height", "0", function(Value)
-        local height = tonumber(Value) or 0
-        if height <= 0 then
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                local bp = LocalPlayer.Character.HumanoidRootPart:FindFirstChild("FloatBP")
-                if bp then bp:Destroy() end
+    -- ✅ 重構 Fly Height：改為滑條並修復記憶體洩漏
+    local function updateFlyHeight(character)
+        if flyConn then flyConn:Disconnect() flyConn = nil end
+        if flyBP then flyBP:Destroy() flyBP = nil end
+
+        if flyHeight <= 0 or not character then return end
+
+        local humanoid = character:WaitForChild("Humanoid", 3)
+        local rootPart = character:WaitForChild("HumanoidRootPart", 3)
+        if not humanoid or not rootPart then return end
+
+        flyBP = Instance.new("BodyPosition")
+        flyBP.MaxForce = Vector3.new(0, 4000, 0)
+        flyBP.P = 12500
+        flyBP.D = 1000
+        flyBP.Name = "FloatBP"
+        flyBP.Parent = rootPart
+
+        flyConn = RunService.Heartbeat:Connect(function()
+            if not rootPart or not rootPart.Parent then return end
+            local rayOrigin = rootPart.Position
+            local rayDirection = Vector3.new(0, -500, 0)
+            local raycastParams = RaycastParams.new()
+            raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+            raycastParams.FilterDescendantsInstances = { character }
+            local raycastResult = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+            if raycastResult then
+                local targetY = raycastResult.Position.Y + flyHeight + humanoid.HipHeight
+                flyBP.Position = Vector3.new(rootPart.Position.X, targetY, rootPart.Position.Z)
             end
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("FloatConn") then
-                LocalPlayer.Character.FloatConn:Disconnect()
-            end
-            return
-        end
-        height = math.clamp(height, 1, 100)
-        local function onCharacterAdded(character)
-            if character:FindFirstChild("FloatConn") then character.FloatConn:Disconnect() end
-            if character:FindFirstChild("HumanoidRootPart") then
-                local bp = character.HumanoidRootPart:FindFirstChild("FloatBP")
-                if bp then bp:Destroy() end
-            end
-            local humanoid = character:WaitForChild("Humanoid")
-            local rootPart = character:WaitForChild("HumanoidRootPart")
-            local bodyPos = Instance.new("BodyPosition")
-            bodyPos.MaxForce = Vector3.new(0, 4000, 0)
-            bodyPos.P = 12500
-            bodyPos.D = 1000
-            bodyPos.Name = "FloatBP"
-            bodyPos.Parent = rootPart
-            local connection = RunService.Heartbeat:Connect(function()
-                local rayOrigin = rootPart.Position
-                local rayDirection = Vector3.new(0, -500, 0)
-                local raycastParams = RaycastParams.new()
-                raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-                raycastParams.FilterDescendantsInstances = { character }
-                local raycastResult = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
-                if raycastResult then
-                    local targetY = raycastResult.Position.Y + height + humanoid.HipHeight
-                    bodyPos.Position = Vector3.new(rootPart.Position.X, targetY, rootPart.Position.Z)
-                end
-            end)
-            connection.Name = "FloatConn"
-            character.FloatConn = connection
-        end
-        if LocalPlayer.Character then onCharacterAdded(LocalPlayer.Character) end
-        LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+        end)
+    end
+
+    -- ✅ 改成滑條 (0-100)，0代表關閉，5-100代表具體高度
+    A:Slider("Fly Height", 0, 100, 0, function(height)
+        flyHeight = height
+        updateFlyHeight(LocalPlayer.Character)
+    end)
+
+    -- ✅ 統一在這裡處理重生，避免重複綁定監聽導致卡頓
+    LocalPlayer.CharacterAdded:Connect(function(char)
+        task.wait(1)
+        applySpeedHack(char)
+        updateFlyHeight(char)
     end)
 
     A:Toggle("Farm Money", false, function(v)
