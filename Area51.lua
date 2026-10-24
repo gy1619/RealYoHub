@@ -99,78 +99,67 @@ local function Notify(title, content, duration, icon)
 end
 
 -- ✅ 核心：封裝通用極速過檢查點
--- ✅ 核心：封裝通用極速過檢查點
 local function FastBypassCheckpoint(character)
     local root = character and character:FindFirstChild("HumanoidRootPart")
     local hum = character and character:FindFirstChild("Humanoid")
-    if not root or not hum then return end
+    if not root or not hum then return false end
     
-    -- 🛑 開啟防污染鎖，停止記錄玩家的移動位置
     _G.IsBypassing = true
     
     local entrance = Workspace:FindFirstChild("Entrance", true)
     if not entrance then
-        -- 如果找不到模型，直接跳過，絕不亂傳送
         _G.IsBypassing = false
-        return
+        return false
     end
     
-    local ping = 50
+    local success = false
     pcall(function()
+        local ping = 50
         local stats = game:GetService("Stats")
         if stats and stats.Network and stats.Network.ServerStatsItem then
             ping = stats.Network.ServerStatsItem["Data Ping"]:GetValue()
         end
+        
+        -- 強制穿牆
+        for _, p in ipairs(character:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide = false end
+        end
+        
+        if ping > 250 then
+            root.CFrame = CFrame.new(625.76, 1127.85, 749.51)
+            task.wait(1.5)
+            success = true
+        else
+            local speed = -1000
+            if ping > 120 then speed = -500 end
+            for attempt = 1, 3 do
+                root.CFrame = entrance.CFrame + Vector3.new(0, 50, 0)
+                task.wait(0.05)
+                
+                local bv = Instance.new("BodyVelocity")
+                bv.Velocity = Vector3.new(0, speed, 0)
+                bv.MaxForce = Vector3.new(0, math.huge, 0)
+                bv.Parent = root
+                hum:ChangeState(Enum.HumanoidStateType.Freefall)
+                
+                local timeOut = tick() + 0.3 + (ping / 1000)
+                local passed = false
+                while tick() < timeOut do
+                    task.wait(0.02)
+                    if root.Position.Y < entrance.Position.Y - 5 then
+                        passed = true
+                        break
+                    end
+                end
+                bv:Destroy()
+                if passed then success = true break end
+                task.wait(0.1)
+            end
+        end
     end)
     
-    -- 暫時關閉碰撞
-    local changedParts = {}
-    for _, p in ipairs(character:GetDescendants()) do
-        if p:IsA("BasePart") then
-            changedParts[p] = p.CanCollide
-            p.CanCollide = false
-        end
-    end
-    
-    if ping > 250 then
-        -- 極高延遲安全模式
-        root.CFrame = CFrame.new(625.76, 1127.85, 749.51)
-        task.wait(1.5)
-    else
-        local speed = -1000
-        if ping > 120 then speed = -500 end
-        for attempt = 1, 3 do
-            root.CFrame = entrance.CFrame + Vector3.new(0, 50, 0)
-            task.wait(0.05)
-            
-            local bv = Instance.new("BodyVelocity")
-            bv.Velocity = Vector3.new(0, speed, 0)
-            bv.MaxForce = Vector3.new(0, math.huge, 0)
-            bv.Parent = root
-            hum:ChangeState(Enum.HumanoidStateType.Freefall)
-            
-            local timeOut = tick() + 0.3 + (ping / 1000)
-            local success = false
-            while tick() < timeOut do
-                task.wait(0.02)
-                if root.Position.Y < entrance.Position.Y - 5 then
-                    success = true
-                    break
-                end
-            end
-            bv:Destroy()
-            if success then break end
-            task.wait(0.1)
-        end
-    end
-    
-    -- 恢復碰撞
-    for p, state in pairs(changedParts) do
-        if p and p.Parent then p.CanCollide = state end
-    end
-    
-    -- 🔓 解除防污染鎖
     _G.IsBypassing = false
+    return success
 end
 
 local function BridgeAdapter(bridge)
@@ -195,7 +184,6 @@ end
     return A
 end
 
--- ========== Gun Modded V2 ==========
 -- ========== Gun Modded V2 ==========
 local function BuildGunModded(A)
     local bridge = A._b
@@ -868,7 +856,7 @@ local function BuildArea51(A)
     local lastMovingPos = hrp.CFrame
     _G.RealSupplyLoop = true
     
-    -- ✅ 實時跟蹤玩家移動位置（加入防污染鎖）
+    -- 實時跟蹤玩家移動位置
     task.spawn(function()
         while _G.RealSupplyLoop do
             task.wait(0.1)
@@ -892,59 +880,70 @@ local function BuildArea51(A)
                 local hum = char:FindFirstChild("Humanoid")
                 if not root or not hum or hum.Health <= 0 then return end
                 
-                -- 1. 搜尋全圖物資
+                -- 1. 絕對嚴格過濾：必須有名字，且裡面必須有 ProximityPrompt（按鈕），才算真物資！
                 local supplies = {}
-                for _, obj in ipairs(Workspace:GetChildren()) do
-                    if obj.Name == "SupplyCrate" or obj.Name:find("Ball") then
-                        table.insert(supplies, obj)
-                    end
-                end
-                
-                -- 🛑 如果沒箱子，直接跳過這個循環，絕不執行傳送！
-                if #supplies == 0 then return end
-                
-                -- 2. 鎖定開始傳送前的絕對座標
-                local startPos = lastMovingPos
-                local cam = workspace.CurrentCamera
-                local oldCamType = cam.CameraType
-                
-                -- 3. 呼叫公共極速過點函數
-                FastBypassCheckpoint(char)
-                
-                -- 4. 拿取物資
-                cam.CameraType = Enum.CameraType.Scriptable
-                for _, supply in ipairs(supplies) do
-                    if (supply.Position - Vector3.new(-816, 5181, 493)).Magnitude > 5
-                    and (supply.Position - Vector3.new(-816, 5181, 630)).Magnitude > 5
-                    and (supply.Position - Vector3.new(-816, 5181, 376)).Magnitude > 5 then
-                        
-                        local targetPos = supply.Position + Vector3.new(0, -5, 0)
-                        root.CFrame = CFrame.new(targetPos)
-                        cam.CFrame = CFrame.new(targetPos, supply.Position) 
-                        root.CFrame = CFrame.new(targetPos, supply.Position) 
-                        
-                        local startTime = tick()
-                        while tick() - startTime < 0.5 do
-                            if not supply.Parent then break end
-                            for _, desc in ipairs(supply:GetDescendants()) do
-                                if desc:IsA("ProximityPrompt") then
-                                    desc.MaxActivationDistance = 100
-                                    desc.HoldDuration = 0
-                                    fireproximityprompt(desc)
-                                end
-                            end
-                            task.wait(0.03)
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    if obj.Name == "SupplyCrate" or obj.Name == "Ball" or obj.Name == "SupplyBall" then
+                        local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+                        if prompt then
+                            table.insert(supplies, obj)
                         end
                     end
                 end
                 
-                -- 5. 恢復狀態，回到原位
-                root.CFrame = startPos
-                hum.PlatformStand = false
-                hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-                task.delay(0.1, function()
-                    if cam.CameraType == Enum.CameraType.Scriptable then cam.CameraType = oldCamType end
-                end)
+                -- 🛑 絕對防呆：如果沒有真物資，直接 return，絕不觸發任何傳送！
+                if #supplies == 0 then return end
+                
+                local startPos = lastMovingPos
+                local cam = workspace.CurrentCamera
+                local oldCamType = cam.CameraType
+                
+                -- 2. 過檢查點（這裡會開啟穿牆並返回狀態）
+                local bypassOk = FastBypassCheckpoint(char)
+                
+                if bypassOk then
+                    -- 3. 拿取物資
+                    cam.CameraType = Enum.CameraType.Scriptable
+                    for _, supply in ipairs(supplies) do
+                        if (supply.Position - Vector3.new(-816, 5181, 493)).Magnitude > 5
+                        and (supply.Position - Vector3.new(-816, 5181, 630)).Magnitude > 5
+                        and (supply.Position - Vector3.new(-816, 5181, 376)).Magnitude > 5 then
+                            
+                            local targetPos = supply.Position + Vector3.new(0, -5, 0)
+                            root.CFrame = CFrame.new(targetPos)
+                            cam.CFrame = CFrame.new(targetPos, supply.Position) 
+                            root.CFrame = CFrame.new(targetPos, supply.Position) 
+                            
+                            local startTime = tick()
+                            while tick() - startTime < 0.5 do
+                                if not supply.Parent then break end
+                                for _, desc in ipairs(supply:GetDescendants()) do
+                                    if desc:IsA("ProximityPrompt") then
+                                        desc.MaxActivationDistance = 100
+                                        desc.HoldDuration = 0
+                                        fireproximityprompt(desc)
+                                    end
+                                end
+                                task.wait(0.03)
+                            end
+                        end
+                    end
+                    
+                    -- 4. 回原位
+                    root.CFrame = startPos
+                    hum.PlatformStand = false
+                    hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                    task.delay(0.1, function()
+                        if cam.CameraType == Enum.CameraType.Scriptable then cam.CameraType = oldCamType end
+                    end)
+                    
+                    -- 5. 回到原位後，才恢復碰撞
+                    task.delay(0.2, function()
+                        for _, p in ipairs(char:GetDescendants()) do
+                            if p:IsA("BasePart") then p.CanCollide = true end
+                        end
+                    end)
+                end
                 
                 task.wait(0.3)
             end)
