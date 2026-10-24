@@ -1100,5 +1100,6 @@ if Runtime.Mode == "Host" and DefCheck() then
     SafeCall("HandshakeToast", function() Notify("RealYoHub", "Handshake OK - hosted by RealYoUI", 6) end)
     print(">>> [Area51] all builds dispatched <<<")
 else
+    --yyyy
     warn("[RealYoHub] not built. Mode=" .. tostring(Runtime.Mode) .. " (Host 未握手成功 或 DefCheck 失败)")
 end
