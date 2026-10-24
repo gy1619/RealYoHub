@@ -822,7 +822,7 @@ local function BuildArea51(A)
                 end
                 if #supplies == 0 then return end
                 
-                -- ✅ 核心修復 1：鎖定開始傳送前的絕對座標
+                -- 鎖定開始傳送前的絕對座標
                 local startPos = lastMovingPos
                 
                 for _, supply in ipairs(supplies) do
@@ -833,23 +833,21 @@ local function BuildArea51(A)
                         local cam = workspace.CurrentCamera
                         local oldCamType = cam.CameraType
                         
-                        -- 1. 回大廳安全點，強制普通視角
+                        -- 1. 回大廳安全點（純淨等待，絕不強行拉回）
                         local safePoint = CFrame.new(625.76, 1127.85, 749.51)
                         cam.CameraType = Enum.CameraType.Custom
-                        root.CFrame = safePoint
                         
+                        -- 暫時關閉飛行，防止被抬飛
                         local flyBP = root:FindFirstChild("FloatBP")
                         if flyBP then flyBP.Enabled = false end
                         
-                        local waitTime = tick() + 1.5
-                        while tick() < waitTime do
-                            if (root.Position - safePoint.Position).Magnitude > 5 then
-                                root.CFrame = safePoint
-                            end
-                            task.wait(0.1)
-                        end
+                        -- 傳送回大廳
+                        root.CFrame = safePoint
                         
-                        -- 2. 關閉碰撞準備瞬移
+                        -- 🛑 核心：絕對不碰這 1.5 秒，讓服務器自然記錄位置
+                        task.wait(1.5)
+                        
+                        -- 2. 恢復飛行，關閉碰撞準備瞬移
                         if flyBP then flyBP.Enabled = true end
                         for _, p in ipairs(char:GetDescendants()) do
                             if p:IsA("BasePart") then p.CanCollide = false end
@@ -879,7 +877,7 @@ local function BuildArea51(A)
                         -- 4. 恢復相機並回到「鎖定的絕對起始座標」
                         root.CFrame = startPos
                         
-                        -- ✅ 核心修復 2：解除布偶狀態，防物理卡地
+                        -- 解除布偶狀態
                         hum.PlatformStand = false
                         hum:ChangeState(Enum.HumanoidStateType.GettingUp)
                         task.wait(0.1)
@@ -891,7 +889,7 @@ local function BuildArea51(A)
                             end
                         end)
                         
-                        -- ✅ 核心修復 3：延遲開啟碰撞，避免物理引擎將你推倒
+                        -- 延遲開啟碰撞
                         task.delay(0.2, function()
                             for _, p in ipairs(char:GetDescendants()) do
                                 if p:IsA("BasePart") then p.CanCollide = true end
@@ -1100,6 +1098,5 @@ if Runtime.Mode == "Host" and DefCheck() then
     SafeCall("HandshakeToast", function() Notify("RealYoHub", "Handshake OK - hosted by RealYoUI", 6) end)
     print(">>> [Area51] all builds dispatched <<<")
 else
-    --yyyy
     warn("[RealYoHub] not built. Mode=" .. tostring(Runtime.Mode) .. " (Host 未握手成功 或 DefCheck 失败)")
 end
