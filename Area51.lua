@@ -101,7 +101,13 @@ end
 local function BridgeAdapter(bridge)
     local A = { _b = bridge }
     function A:Section(t) return self._b:Section(t) end
-    function A:Label(t) return self._b:Label(t) end
+    function A:Label(t, opts) 
+    if type(t) == "table" then
+        return self._b:Label(t.Text, { Color = t.Color, Size = t.Size })
+    else
+        return self._b:Label(t) 
+    end
+end
     function A:Button(t, cb) return self._b:Button(t, cb) end
     function A:Toggle(t, def, cb, group) return self._b:Toggle(t, def, cb, { Group = group, Register = false }) end
     function A:Slider(t, min, max, def, cb, group) return self._b:Slider(t, min, max, def, cb, { Group = group, Register = false }) end
@@ -775,110 +781,167 @@ local function BuildArea51(A)
     AddWeaponButton("Ice Crossbow", Vector3.new(625.76, 1127.85, 749.51), Vector3.new(243.564, 687.29, 943.856))
 
     A:Toggle("Auto Supply Crate", false, function(state)
-        if not state then
-            if _G.RealSupplyLoop then _G.RealSupplyLoop = false end
-            return
+    if not state then
+        if _G.RealSupplyLoop then _G.RealSupplyLoop = false end
+        return
+    end
+    
+    local player = LocalPlayer
+    local char = player.Character or player.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart")
+    local lastMovingPos = hrp.CFrame
+    _G.RealSupplyLoop = true
+    
+    -- 實時跟蹤玩家移動位置（若變布偶物理滑動，不記錄）
+    task.spawn(function()
+        while _G.RealSupplyLoop do
+            task.wait(0.1)
+            pcall(function()
+                local hum = player.Character and player.Character:FindFirstChild("Humanoid")
+                if hum and hum.MoveDirection.Magnitude > 0 and hum:GetState() ~= Enum.HumanoidStateType.FallingDown then
+                    lastMovingPos = player.Character.HumanoidRootPart.CFrame
+                end
+            end)
         end
-        
-        local player = LocalPlayer
-        local char = player.Character or player.CharacterAdded:Wait()
-        local hrp = char:WaitForChild("HumanoidRootPart")
-        local lastMovingPos = hrp.CFrame
-        _G.RealSupplyLoop = true
-        
-        -- 實時跟蹤玩家移動位置
-        task.spawn(function()
-            while _G.RealSupplyLoop do
-                task.wait(0.1)
-                pcall(function()
-                    local hum = player.Character and player.Character:FindFirstChild("Humanoid")
-                    if hum and hum.MoveDirection.Magnitude > 0 then
-                        lastMovingPos = player.Character.HumanoidRootPart.CFrame
-                    end
-                end)
-            end
-        end)
+    end)
 
-        task.spawn(function()
-            while _G.RealSupplyLoop do
-                task.wait(1.2)
-                pcall(function()
-                    local char = player.Character or player.CharacterAdded:Wait()
-                    local root = char:FindFirstChild("HumanoidRootPart")
-                    local hum = char:FindFirstChild("Humanoid")
-                    if not root or not hum or hum.Health <= 0 then return end
-                    
-                    local supplies = {}
-                    for _, obj in ipairs(Workspace:GetChildren()) do
-                        if obj.Name == "SupplyCrate" or obj.Name:find("Ball") then
-                            table.insert(supplies, obj)
-                        end
+    task.spawn(function()
+        while _G.RealSupplyLoop do
+            task.wait(1.2)
+            pcall(function()
+                local char = player.Character or player.CharacterAdded:Wait()
+                local root = char:FindFirstChild("HumanoidRootPart")
+                local hum = char:FindFirstChild("Humanoid")
+                if not root or not hum or hum.Health <= 0 then return end
+                
+                local supplies = {}
+                for _, obj in ipairs(Workspace:GetChildren()) do
+                    if obj.Name == "SupplyCrate" or obj.Name:find("Ball") then
+                        table.insert(supplies, obj)
                     end
-                    if #supplies == 0 then return end
-                    
-                    for _, supply in ipairs(supplies) do
-                        if (supply.Position - Vector3.new(-816, 5181, 493)).Magnitude > 5
-                        and (supply.Position - Vector3.new(-816, 5181, 630)).Magnitude > 5
-                        and (supply.Position - Vector3.new(-816, 5181, 376)).Magnitude > 5 then
-                            
-                            -- 1. 回大廳安全點（Checkpoint，防封號）
-                            local safePoint = CFrame.new(625.76, 1127.85, 749.51)
-                            root.CFrame = safePoint
-                            task.wait(1.5)
-                            
-                            -- 2. 關閉碰撞準備瞬移
-                            for _, p in ipairs(char:GetDescendants()) do
-                                if p:IsA("BasePart") then p.CanCollide = false end
+                end
+                if #supplies == 0 then return end
+                
+                -- ✅ 核心修復 1：鎖定開始傳送前的絕對座標
+                local startPos = lastMovingPos
+                
+                for _, supply in ipairs(supplies) do
+                    if (supply.Position - Vector3.new(-816, 5181, 493)).Magnitude > 5
+                    and (supply.Position - Vector3.new(-816, 5181, 630)).Magnitude > 5
+                    and (supply.Position - Vector3.new(-816, 5181, 376)).Magnitude > 5 then
+                        
+                        local cam = workspace.CurrentCamera
+                        local oldCamType = cam.CameraType
+                        
+                        -- 1. 回大廳安全點，強制普通視角
+                        local safePoint = CFrame.new(625.76, 1127.85, 749.51)
+                        cam.CameraType = Enum.CameraType.Custom
+                        root.CFrame = safePoint
+                        
+                        local flyBP = root:FindFirstChild("FloatBP")
+                        if flyBP then flyBP.Enabled = false end
+                        
+                        local waitTime = tick() + 1.5
+                        while tick() < waitTime do
+                            if (root.Position - safePoint.Position).Magnitude > 5 then
+                                root.CFrame = safePoint
                             end
+                            task.wait(0.1)
+                        end
+                        
+                        -- 2. 關閉碰撞準備瞬移
+                        if flyBP then flyBP.Enabled = true end
+                        for _, p in ipairs(char:GetDescendants()) do
+                            if p:IsA("BasePart") then p.CanCollide = false end
+                        end
+                        
+                        -- 3. 高頻懸空追蹤拿取
+                        cam.CameraType = Enum.CameraType.Scriptable
+                        local startTime = tick()
+                        while tick() - startTime < 1.0 do
+                            if not supply.Parent then break end
                             
-                            local cam = workspace.CurrentCamera
-                            local oldCamType = cam.CameraType
-                            cam.CameraType = Enum.CameraType.Scriptable
+                            local targetPos = supply.Position + Vector3.new(0, -10, 0)
+                            root.CFrame = CFrame.new(targetPos)
+                            cam.CFrame = CFrame.new(targetPos, supply.Position) 
+                            root.CFrame = CFrame.new(targetPos, supply.Position) 
                             
-                            -- 3. 高頻懸空追蹤拿取
-                            local startTime = tick()
-                            while tick() - startTime < 1.0 do
-                                if not supply.Parent then break end
-                                
-                                local targetPos = supply.Position + Vector3.new(0, -10, 0)
-                                root.CFrame = CFrame.new(targetPos)
-                                cam.CFrame = CFrame.new(targetPos, supply.Position) 
-                                root.CFrame = CFrame.new(targetPos, supply.Position) 
-                                
-                                for _, desc in ipairs(supply:GetDescendants()) do
-                                    if desc:IsA("ProximityPrompt") then
-                                        desc.MaxActivationDistance = 100
-                                        desc.HoldDuration = 0
-                                        fireproximityprompt(desc)
-                                    end
+                            for _, desc in ipairs(supply:GetDescendants()) do
+                                if desc:IsA("ProximityPrompt") then
+                                    desc.MaxActivationDistance = 100
+                                    desc.HoldDuration = 0
+                                    fireproximityprompt(desc)
                                 end
-                                task.wait(0.03)
                             end
-                            
-                            -- 4. 恢復相機、碰撞，直接傳回原本打怪的位置
-                            cam.CameraType = oldCamType
-                            root.CFrame = lastMovingPos
+                            task.wait(0.03)
+                        end
+                        
+                        -- 4. 恢復相機並回到「鎖定的絕對起始座標」
+                        root.CFrame = startPos
+                        
+                        -- ✅ 核心修復 2：解除布偶狀態，防物理卡地
+                        hum.PlatformStand = false
+                        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                        task.wait(0.1)
+                        hum:ChangeState(Enum.HumanoidStateType.Running)
+                        
+                        task.delay(0.1, function()
+                            if cam.CameraType == Enum.CameraType.Scriptable then
+                                cam.CameraType = oldCamType
+                            end
+                        end)
+                        
+                        -- ✅ 核心修復 3：延遲開啟碰撞，避免物理引擎將你推倒
+                        task.delay(0.2, function()
                             for _, p in ipairs(char:GetDescendants()) do
                                 if p:IsA("BasePart") then p.CanCollide = true end
                             end
-                            
-                            task.wait(0.3)
-                        end
+                        end)
+                        
+                        task.wait(0.3)
                     end
-                end)
-            end
-        end)
+                end
+            end)
+        end
     end)
+end)
 
-    A:Button("Destroy All Damage Parts", function()
-        for _, v in ipairs(Workspace:GetDescendants()) do
-            if v.Name == "DamagePart" or v.Name == "Lava" or v.Name:find("Fire") then
-                v:Destroy()
+-- ✅ 手動重置相機（防極小概率卡視角）
+A:Button("Reset Camera", function()
+    local cam = workspace.CurrentCamera
+    cam.CameraType = Enum.CameraType.Custom
+end)
+A:Label({ Text = "Use when you get stuck", Color = Color3.fromRGB(50, 255, 50) })
+
+-- ✅ 一鍵瞬間拿取（針對多個箱子聚集時使用）
+A:Button("Instant Get Supply", function()
+    local count = 0
+    for _, v in ipairs(Workspace:GetChildren()) do
+        if v.Name == "SupplyCrate" or v.Name:find("Ball") then
+            for _, desc in ipairs(v:GetDescendants()) do
+                if desc:IsA("ProximityPrompt") then
+                    desc.HoldDuration = 0
+                    fireproximityprompt(desc)
+                    count = count + 1
+                end
             end
         end
-        Notify("Cleanup", "All damage parts removed", 5)
-    end)
-end
+    end
+    if count > 0 then
+        Notify("Supply", "Force triggered " .. count .. " supplies", 3)
+    else
+        Notify("Supply", "No supplies found nearby", 3)
+    end
+end)
+
+A:Button("Destroy All Damage Parts", function()
+    for _, v in ipairs(Workspace:GetDescendants()) do
+        if v.Name == "DamagePart" or v.Name == "Lava" or v.Name:find("Fire") then
+            v:Destroy()
+        end
+    end
+    Notify("Cleanup", "All damage parts removed", 5)
+end)
 
 -- ========== Teleport ==========
 local function BuildTeleport(A)
