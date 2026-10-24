@@ -99,16 +99,19 @@ local function Notify(title, content, duration, icon)
 end
 
 -- ✅ 核心：封裝通用極速過檢查點
+-- ✅ 核心：封裝通用極速過檢查點
 local function FastBypassCheckpoint(character)
     local root = character and character:FindFirstChild("HumanoidRootPart")
     local hum = character and character:FindFirstChild("Humanoid")
     if not root or not hum then return end
     
+    -- 🛑 開啟防污染鎖，停止記錄玩家的移動位置
+    _G.IsBypassing = true
+    
     local entrance = Workspace:FindFirstChild("Entrance", true)
     if not entrance then
-        -- 找不到模型退回安全等待
-        root.CFrame = CFrame.new(625.76, 1127.85, 749.51)
-        task.wait(1.5)
+        -- 如果找不到模型，直接跳過，絕不亂傳送
+        _G.IsBypassing = false
         return
     end
     
@@ -130,7 +133,7 @@ local function FastBypassCheckpoint(character)
     end
     
     if ping > 250 then
-        -- 極高延遲，切換安全模式
+        -- 極高延遲安全模式
         root.CFrame = CFrame.new(625.76, 1127.85, 749.51)
         task.wait(1.5)
     else
@@ -165,6 +168,9 @@ local function FastBypassCheckpoint(character)
     for p, state in pairs(changedParts) do
         if p and p.Parent then p.CanCollide = state end
     end
+    
+    -- 🔓 解除防污染鎖
+    _G.IsBypassing = false
 end
 
 local function BridgeAdapter(bridge)
@@ -862,16 +868,18 @@ local function BuildArea51(A)
     local lastMovingPos = hrp.CFrame
     _G.RealSupplyLoop = true
     
-    -- 實時跟蹤玩家移動位置
+    -- ✅ 實時跟蹤玩家移動位置（加入防污染鎖）
     task.spawn(function()
         while _G.RealSupplyLoop do
             task.wait(0.1)
-            pcall(function()
-                local hum = player.Character and player.Character:FindFirstChild("Humanoid")
-                if hum and hum.MoveDirection.Magnitude > 0 and hum:GetState() ~= Enum.HumanoidStateType.FallingDown then
-                    lastMovingPos = player.Character.HumanoidRootPart.CFrame
-                end
-            end)
+            if not _G.IsBypassing then
+                pcall(function()
+                    local hum = player.Character and player.Character:FindFirstChild("Humanoid")
+                    if hum and hum.MoveDirection.Magnitude > 0 and hum:GetState() ~= Enum.HumanoidStateType.FallingDown then
+                        lastMovingPos = player.Character.HumanoidRootPart.CFrame
+                    end
+                end)
+            end
         end
     end)
 
@@ -884,22 +892,26 @@ local function BuildArea51(A)
                 local hum = char:FindFirstChild("Humanoid")
                 if not root or not hum or hum.Health <= 0 then return end
                 
+                -- 1. 搜尋全圖物資
                 local supplies = {}
                 for _, obj in ipairs(Workspace:GetChildren()) do
                     if obj.Name == "SupplyCrate" or obj.Name:find("Ball") then
                         table.insert(supplies, obj)
                     end
                 end
+                
+                -- 🛑 如果沒箱子，直接跳過這個循環，絕不執行傳送！
                 if #supplies == 0 then return end
                 
+                -- 2. 鎖定開始傳送前的絕對座標
                 local startPos = lastMovingPos
                 local cam = workspace.CurrentCamera
                 local oldCamType = cam.CameraType
                 
-                -- 🚀 呼叫公共極速過點函數
+                -- 3. 呼叫公共極速過點函數
                 FastBypassCheckpoint(char)
                 
-                -- 📦 拿取物資
+                -- 4. 拿取物資
                 cam.CameraType = Enum.CameraType.Scriptable
                 for _, supply in ipairs(supplies) do
                     if (supply.Position - Vector3.new(-816, 5181, 493)).Magnitude > 5
@@ -926,7 +938,7 @@ local function BuildArea51(A)
                     end
                 end
                 
-                -- 恢復狀態
+                -- 5. 恢復狀態，回到原位
                 root.CFrame = startPos
                 hum.PlatformStand = false
                 hum:ChangeState(Enum.HumanoidStateType.GettingUp)
