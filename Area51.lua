@@ -942,7 +942,7 @@ A:Button("Destroy All Damage Parts", function()
     end
     Notify("Cleanup", "All damage parts removed", 5)
 end)
-
+end
 -- ========== Teleport ==========
 local function BuildTeleport(A)
     local places = {
