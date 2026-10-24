@@ -98,6 +98,75 @@ local function Notify(title, content, duration, icon)
     end
 end
 
+-- ✅ 核心：封裝通用極速過檢查點
+local function FastBypassCheckpoint(character)
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    local hum = character and character:FindFirstChild("Humanoid")
+    if not root or not hum then return end
+    
+    local entrance = Workspace:FindFirstChild("Entrance", true)
+    if not entrance then
+        -- 找不到模型退回安全等待
+        root.CFrame = CFrame.new(625.76, 1127.85, 749.51)
+        task.wait(1.5)
+        return
+    end
+    
+    local ping = 50
+    pcall(function()
+        local stats = game:GetService("Stats")
+        if stats and stats.Network and stats.Network.ServerStatsItem then
+            ping = stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+        end
+    end)
+    
+    -- 暫時關閉碰撞
+    local changedParts = {}
+    for _, p in ipairs(character:GetDescendants()) do
+        if p:IsA("BasePart") then
+            changedParts[p] = p.CanCollide
+            p.CanCollide = false
+        end
+    end
+    
+    if ping > 250 then
+        -- 極高延遲，切換安全模式
+        root.CFrame = CFrame.new(625.76, 1127.85, 749.51)
+        task.wait(1.5)
+    else
+        local speed = -1000
+        if ping > 120 then speed = -500 end
+        for attempt = 1, 3 do
+            root.CFrame = entrance.CFrame + Vector3.new(0, 50, 0)
+            task.wait(0.05)
+            
+            local bv = Instance.new("BodyVelocity")
+            bv.Velocity = Vector3.new(0, speed, 0)
+            bv.MaxForce = Vector3.new(0, math.huge, 0)
+            bv.Parent = root
+            hum:ChangeState(Enum.HumanoidStateType.Freefall)
+            
+            local timeOut = tick() + 0.3 + (ping / 1000)
+            local success = false
+            while tick() < timeOut do
+                task.wait(0.02)
+                if root.Position.Y < entrance.Position.Y - 5 then
+                    success = true
+                    break
+                end
+            end
+            bv:Destroy()
+            if success then break end
+            task.wait(0.1)
+        end
+    end
+    
+    -- 恢復碰撞
+    for p, state in pairs(changedParts) do
+        if p and p.Parent then p.CanCollide = state end
+    end
+end
+
 local function BridgeAdapter(bridge)
     local A = { _b = bridge }
     function A:Section(t) return self._b:Section(t) end
@@ -766,10 +835,11 @@ local function BuildArea51(A)
                     if p then p.HoldDuration = 0; fireproximityprompt(p) end
                 end
                 task.wait(0.8)
-                root.CFrame = CFrame.new(623.5, 1072, 749.75)
-                task.wait(0.6)
+                -- ✅ 替換原本的 0.6 秒等待
+                FastBypassCheckpoint(LocalPlayer.Character)
             else
-                if mid then root.CFrame = CFrame.new(mid) task.wait(3) end
+                -- ✅ 替換原本的 mid 3秒等待
+                if mid then FastBypassCheckpoint(LocalPlayer.Character) end
             end
             root.CFrame = CFrame.new(final)
             Notify("Success", "Obtained " .. name, 5)
@@ -792,7 +862,7 @@ local function BuildArea51(A)
     local lastMovingPos = hrp.CFrame
     _G.RealSupplyLoop = true
     
-    -- 實時跟蹤玩家移動位置（若變布偶物理滑動，不記錄）
+    -- 實時跟蹤玩家移動位置
     task.spawn(function()
         while _G.RealSupplyLoop do
             task.wait(0.1)
@@ -807,7 +877,7 @@ local function BuildArea51(A)
 
     task.spawn(function()
         while _G.RealSupplyLoop do
-            task.wait(1.2)
+            task.wait(1.0)
             pcall(function()
                 local char = player.Character or player.CharacterAdded:Wait()
                 local root = char:FindFirstChild("HumanoidRootPart")
@@ -822,48 +892,28 @@ local function BuildArea51(A)
                 end
                 if #supplies == 0 then return end
                 
-                -- 鎖定開始傳送前的絕對座標
                 local startPos = lastMovingPos
+                local cam = workspace.CurrentCamera
+                local oldCamType = cam.CameraType
                 
+                -- 🚀 呼叫公共極速過點函數
+                FastBypassCheckpoint(char)
+                
+                -- 📦 拿取物資
+                cam.CameraType = Enum.CameraType.Scriptable
                 for _, supply in ipairs(supplies) do
                     if (supply.Position - Vector3.new(-816, 5181, 493)).Magnitude > 5
                     and (supply.Position - Vector3.new(-816, 5181, 630)).Magnitude > 5
                     and (supply.Position - Vector3.new(-816, 5181, 376)).Magnitude > 5 then
                         
-                        local cam = workspace.CurrentCamera
-                        local oldCamType = cam.CameraType
+                        local targetPos = supply.Position + Vector3.new(0, -5, 0)
+                        root.CFrame = CFrame.new(targetPos)
+                        cam.CFrame = CFrame.new(targetPos, supply.Position) 
+                        root.CFrame = CFrame.new(targetPos, supply.Position) 
                         
-                        -- 1. 回大廳安全點（純淨等待，絕不強行拉回）
-                        local safePoint = CFrame.new(625.76, 1127.85, 749.51)
-                        cam.CameraType = Enum.CameraType.Custom
-                        
-                        -- 暫時關閉飛行，防止被抬飛
-                        local flyBP = root:FindFirstChild("FloatBP")
-                        if flyBP then flyBP.Enabled = false end
-                        
-                        -- 傳送回大廳
-                        root.CFrame = safePoint
-                        
-                        -- 🛑 核心：絕對不碰這 1.5 秒，讓服務器自然記錄位置
-                        task.wait(1.5)
-                        
-                        -- 2. 恢復飛行，關閉碰撞準備瞬移
-                        if flyBP then flyBP.Enabled = true end
-                        for _, p in ipairs(char:GetDescendants()) do
-                            if p:IsA("BasePart") then p.CanCollide = false end
-                        end
-                        
-                        -- 3. 高頻懸空追蹤拿取
-                        cam.CameraType = Enum.CameraType.Scriptable
                         local startTime = tick()
-                        while tick() - startTime < 1.0 do
+                        while tick() - startTime < 0.5 do
                             if not supply.Parent then break end
-                            
-                            local targetPos = supply.Position + Vector3.new(0, -10, 0)
-                            root.CFrame = CFrame.new(targetPos)
-                            cam.CFrame = CFrame.new(targetPos, supply.Position) 
-                            root.CFrame = CFrame.new(targetPos, supply.Position) 
-                            
                             for _, desc in ipairs(supply:GetDescendants()) do
                                 if desc:IsA("ProximityPrompt") then
                                     desc.MaxActivationDistance = 100
@@ -873,32 +923,18 @@ local function BuildArea51(A)
                             end
                             task.wait(0.03)
                         end
-                        
-                        -- 4. 恢復相機並回到「鎖定的絕對起始座標」
-                        root.CFrame = startPos
-                        
-                        -- 解除布偶狀態
-                        hum.PlatformStand = false
-                        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-                        task.wait(0.1)
-                        hum:ChangeState(Enum.HumanoidStateType.Running)
-                        
-                        task.delay(0.1, function()
-                            if cam.CameraType == Enum.CameraType.Scriptable then
-                                cam.CameraType = oldCamType
-                            end
-                        end)
-                        
-                        -- 延遲開啟碰撞
-                        task.delay(0.2, function()
-                            for _, p in ipairs(char:GetDescendants()) do
-                                if p:IsA("BasePart") then p.CanCollide = true end
-                            end
-                        end)
-                        
-                        task.wait(0.3)
                     end
                 end
+                
+                -- 恢復狀態
+                root.CFrame = startPos
+                hum.PlatformStand = false
+                hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                task.delay(0.1, function()
+                    if cam.CameraType == Enum.CameraType.Scriptable then cam.CameraType = oldCamType end
+                end)
+                
+                task.wait(0.3)
             end)
         end
     end)
@@ -963,8 +999,8 @@ local function BuildTeleport(A)
         A:Button("TP → " .. name, function()
             local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             if root then
-                root.CFrame = CFrame.new(623.5, 1072, 749.75)
-                task.wait(2)
+                -- ✅ 替換原本傳到 623.5 然後等 2 秒的邏輯
+                FastBypassCheckpoint(LocalPlayer.Character)
                 root.CFrame = CFrame.new(pos)
             end
         end)
