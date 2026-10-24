@@ -880,56 +880,67 @@ local function BuildArea51(A)
                 local hum = char:FindFirstChild("Humanoid")
                 if not root or not hum or hum.Health <= 0 then return end
                 
-                -- 1. 絕對嚴格過濾：必須有名字，且裡面必須有 ProximityPrompt（按鈕），才算真物資！
-                local supplies = {}
-                for _, obj in ipairs(Workspace:GetDescendants()) do
-                    if obj.Name == "SupplyCrate" or obj.Name == "Ball" or obj.Name == "SupplyBall" then
-                        local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-                        if prompt then
-                            table.insert(supplies, obj)
+                -- ✅ 1. 虛空黑名單座標（避免抓到無效樣本）
+                local blacklistCoordinates = {
+                    Vector3.new(-816, 5181, 493),
+                    Vector3.new(-816, 5181, 630),
+                    Vector3.new(-816, 5181, 376),
+                }
+                
+                -- ✅ 2. 嚴格過濾：只抓真正存在且不在黑名單內的物資
+                local validSupplies = {}
+                for _, obj in ipairs(Workspace:GetChildren()) do
+                    if obj.Name == "SupplyCrate" or obj.Name == "SupplyBall" then
+                        -- 檢查是否在虛空
+                        local isBlacklisted = false
+                        for _, bc in ipairs(blacklistCoordinates) do
+                            if (obj.Position - bc).Magnitude < 5 then
+                                isBlacklisted = true
+                                break
+                            end
+                        end
+                        
+                        -- 確認有觸發按鈕且不在虛空，才算有效物資
+                        if not isBlacklisted and obj:FindFirstChildWhichIsA("ProximityPrompt", true) then
+                            table.insert(validSupplies, obj)
                         end
                     end
                 end
                 
-                -- 🛑 絕對防呆：如果沒有真物資，直接 return，絕不觸發任何傳送！
-                if #supplies == 0 then return end
+                -- 🛑 如果沒有有效物資，直接中斷，絕不觸發過檢查點！
+                if #validSupplies == 0 then return end
                 
                 local startPos = lastMovingPos
                 local cam = workspace.CurrentCamera
                 local oldCamType = cam.CameraType
                 
-                -- 2. 過檢查點（這裡會開啟穿牆並返回狀態）
+                -- 3. 呼叫公共極速過點函數
                 local bypassOk = FastBypassCheckpoint(char)
                 
                 if bypassOk then
-                    -- 3. 拿取物資
+                    -- 4. 拿取物資
                     cam.CameraType = Enum.CameraType.Scriptable
-                    for _, supply in ipairs(supplies) do
-                        if (supply.Position - Vector3.new(-816, 5181, 493)).Magnitude > 5
-                        and (supply.Position - Vector3.new(-816, 5181, 630)).Magnitude > 5
-                        and (supply.Position - Vector3.new(-816, 5181, 376)).Magnitude > 5 then
-                            
-                            local targetPos = supply.Position + Vector3.new(0, -5, 0)
-                            root.CFrame = CFrame.new(targetPos)
-                            cam.CFrame = CFrame.new(targetPos, supply.Position) 
-                            root.CFrame = CFrame.new(targetPos, supply.Position) 
-                            
-                            local startTime = tick()
-                            while tick() - startTime < 0.5 do
-                                if not supply.Parent then break end
-                                for _, desc in ipairs(supply:GetDescendants()) do
-                                    if desc:IsA("ProximityPrompt") then
-                                        desc.MaxActivationDistance = 100
-                                        desc.HoldDuration = 0
-                                        fireproximityprompt(desc)
-                                    end
+                    for _, supply in ipairs(validSupplies) do
+                        local targetPos = supply.Position + Vector3.new(0, -5, 0)
+                        root.CFrame = CFrame.new(targetPos)
+                        cam.CFrame = CFrame.new(targetPos, supply.Position) 
+                        root.CFrame = CFrame.new(targetPos, supply.Position) 
+                        
+                        local startTime = tick()
+                        while tick() - startTime < 0.5 do
+                            if not supply.Parent then break end
+                            for _, desc in ipairs(supply:GetDescendants()) do
+                                if desc:IsA("ProximityPrompt") then
+                                    desc.MaxActivationDistance = 100
+                                    desc.HoldDuration = 0
+                                    fireproximityprompt(desc)
                                 end
-                                task.wait(0.03)
                             end
+                            task.wait(0.03)
                         end
                     end
                     
-                    -- 4. 回原位
+                    -- 5. 回到原位
                     root.CFrame = startPos
                     hum.PlatformStand = false
                     hum:ChangeState(Enum.HumanoidStateType.GettingUp)
@@ -937,7 +948,7 @@ local function BuildArea51(A)
                         if cam.CameraType == Enum.CameraType.Scriptable then cam.CameraType = oldCamType end
                     end)
                     
-                    -- 5. 回到原位後，才恢復碰撞
+                    -- 延遲恢復碰撞
                     task.delay(0.2, function()
                         for _, p in ipairs(char:GetDescendants()) do
                             if p:IsA("BasePart") then p.CanCollide = true end
